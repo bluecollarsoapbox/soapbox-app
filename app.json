@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "...": "...",
+    "extra": {
+      "EXPO_PUBLIC_API_URL": "http://192.168.1.176:3030",
+      "EXPO_PUBLIC_API_KEY": "99dnfneeekdegnrJJSN3JdenrsdnJ"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "ios": {
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "spotify",
+          "youtube",
+          "fb",
+          "instagram",
+          "tiktok",
+          "twitch",
+          "discord"
+        ]
+      }
+    }
+  }
+}
