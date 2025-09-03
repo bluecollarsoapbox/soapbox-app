@@ -17,16 +17,12 @@ import {
   View
 } from 'react-native';
 import LogoHeader from '../../../components/LogoHeader';
+// was: import { API_URL, AUTH_HEADER } from '@/lib/api';
+import { API_URL, AUTH_HEADER } from '../../lib/api';
 
-const API_KEY = '99dnfneeekdegnrJJSN3JdenrsdnJ';
-const AUTH = { 'x-soapbox-key': API_KEY };
 
-const BASE_URL =
-  Platform.OS === 'web'
-    ? (typeof window !== 'undefined'
-        ? window.location.origin.replace(/:\d+$/, ':3030')
-        : 'http://localhost:3030')
-    : 'http://192.168.1.176:3030';
+const BASE_URL = API_URL;
+const AUTH = AUTH_HEADER;
 
 type StoryId = 'Story1' | 'Story2' | 'Story3' | 'Story4' | 'Story5';
 
@@ -47,8 +43,6 @@ export default function StoryDetail() {
   const soundRef = useRef<Audio.Sound | null>(null);
   const vmUri = useMemo(() => `${BASE_URL}/voicemail/${id}`, [id]);
   const storyTitle = useMemo(() => (title ? String(title) : String(id)), [title, id]);
-
-  
 
   const onStatus = useCallback((s: AVPlaybackStatus) => {
     if (!('isLoaded' in s) || !s.isLoaded) return;
@@ -247,46 +241,63 @@ export default function StoryDetail() {
   };
 
   const actuallyUpload = async (asset: any) => {
-    try {
-      setUploading(true);
+  try {
+    setUploading(true);
 
-      const uri = asset.uri;
-      const nameGuess = (uri.split('/').pop() || 'witness.mp4').replace(/[^\w.\-]/g, '_');
-      const typeGuess =
-        asset.mimeType || (nameGuess.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4');
+    const nameGuess = (String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4')
+      .replace(/[^\w.\-]/g, '_');
 
-      const form = new FormData();
-      form.append('storyId', String(id));
-      form.append('note', '');
-      form.append('file', { uri, name: nameGuess, type: typeGuess } as any);
+    const typeGuess =
+      asset.mimeType ||
+      asset.file?.type ||
+      (nameGuess.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4');
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60_000);
+    const form = new FormData();
+    form.append('storyId', String(id));
+    form.append('note', '');
 
-      const r = await fetch(`${BASE_URL}/witness`, {
-        method: 'POST',
-        headers: AUTH,
-        body: form,
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeout));
-
-      if (!r.ok) {
-        const j = await r.json().catch(() => null);
-        throw new Error(j?.error || `HTTP ${r.status}`);
-      }
-      Alert.alert('Uploaded', 'Your video was posted to the witness feed.');
-    } catch (e: any) {
-      Alert.alert('Upload failed', String(e?.message || e));
-    } finally {
-      setUploading(false);
+    if (Platform.OS === 'web' && asset.file instanceof File) {
+      // ✅ Web: send the actual File object
+      form.append('video', asset.file, asset.file.name || nameGuess);
+    } else {
+      // ✅ iOS/Android: send the file via URI
+      form.append('video', { uri: asset.uri, name: nameGuess, type: typeGuess } as any);
     }
-  };
+
+    // Give uploads more breathing room (3 minutes)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180_000);
+
+    const r = await fetch(`${BASE_URL}/witness`, {
+      method: 'POST',
+      headers: AUTH, // DO NOT set Content-Type for multipart — let the browser/native set it
+      body: form,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+
+    if (!r.ok) {
+      // Try to read server error for better visibility
+      let msg = `HTTP ${r.status}`;
+      try {
+        const j = await r.json();
+        if (j?.error) msg = j.error;
+      } catch {}
+      throw new Error(msg);
+    }
+
+    Alert.alert('Uploaded', 'Your video was posted to the witness feed.');
+  } catch (e: any) {
+    Alert.alert('Upload failed', String(e?.message || e));
+  } finally {
+    setUploading(false);
+  }
+};
+
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: '#0b0d10' }}
       contentContainerStyle={{ padding: 16 }}
-     
     >
       <LogoHeader />
 
@@ -338,40 +349,39 @@ export default function StoryDetail() {
       </Pressable>
 
       {/* Rules modal */}
-<Modal visible={rulesOpen} transparent animationType="fade" onRequestClose={() => setRulesOpen(false)}>
-  <View style={styles.modalWrap}>
-    <View style={styles.modalCard}>
-      <Text style={styles.modalTitle}>Before You Upload</Text>
-      <Text style={styles.modalText}>
-        • Film landscape (sideways){'\n'}
-        • Outside light is best{'\n'}
-        • Use a tripod{'\n'}
-        • Speak up — audio matters{'\n'}
-        • 1 minute max{'\n'}
-        • One upload per story per device
-      </Text>
+      <Modal visible={rulesOpen} transparent animationType="fade" onRequestClose={() => setRulesOpen(false)}>
+        <View style={styles.modalWrap}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Before You Upload</Text>
+            <Text style={styles.modalText}>
+              • Film landscape (sideways){'\n'}
+              • Outside light is best{'\n'}
+              • Use a tripod{'\n'}
+              • Speak up — audio matters{'\n'}
+              • 1 minute max{'\n'}
+              • One upload per story per device
+            </Text>
 
-      {/* Disclaimer on its own line, bold */}
-      <Text style={[styles.modalText, { fontWeight: '800', marginTop: 10 }]}>
-By clicking "I Agree," below, you grant Marshall Patrick and Blue Collar Soapbox permission to use the uploaded video as content on any social media account owned or operated by Marshall Patrick and/or Blue Collar Soapbox      </Text>
+            {/* Disclaimer on its own line, bold */}
+            <Text style={[styles.modalText, { fontWeight: '800', marginTop: 10 }]}>
+              By clicking "I Agree," below, you grant Marshall Patrick and Blue Collar Soapbox permission to use the uploaded video as content on any social media account owned or operated by Marshall Patrick and/or Blue Collar Soapbox
+            </Text>
 
-      <View style={{ height: 12 }} />
-      <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'flex-end' }}>
-        <Pressable onPress={() => setRulesOpen(false)} style={styles.btnGhost} disabled={picking}>
-          <Text style={styles.btnGhostText}>Back</Text>
-        </Pressable>
-        <Pressable onPress={onAgreeAndPick} style={styles.btnPrimary} disabled={picking}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {picking ? <ActivityIndicator size="small" /> : null}
-            <Text style={styles.btnPrimaryText}>{picking ? 'Opening…' : 'I Agree'}</Text>
+            <View style={{ height: 12 }} />
+            <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'flex-end' }}>
+              <Pressable onPress={() => setRulesOpen(false)} style={styles.btnGhost} disabled={picking}>
+                <Text style={styles.btnGhostText}>Back</Text>
+              </Pressable>
+              <Pressable onPress={onAgreeAndPick} style={styles.btnPrimary} disabled={picking}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {picking ? <ActivityIndicator size="small" /> : null}
+                  <Text style={styles.btnPrimaryText}>{picking ? 'Opening…' : 'I Agree'}</Text>
+                </View>
+              </Pressable>
+            </View>
           </View>
-        </Pressable>
-      </View>
-    </View>
-  </View>
-</Modal>
-
-
+        </View>
+      </Modal>
 
       {/* Ideas modal */}
       <Modal visible={ideasOpen} transparent animationType="fade" onRequestClose={() => setIdeasOpen(false)}>

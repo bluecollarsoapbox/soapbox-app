@@ -2,27 +2,14 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import LogoHeader from '../../components/LogoHeader';
 
+// ✅ shared API config (points at Render)
+import { API_URL, AUTH_HEADER } from '../lib/api';
 
-const API_KEY = '99dnfneeekdegnrJJSN3JdenrsdnJ';
-const AUTH = { 'x-soapbox-key': API_KEY };
-
-const BASE_URL =
-  Platform.OS === 'web'
-    ? (typeof window !== 'undefined'
-        ? window.location.origin.replace(/:\d+$/, ':3030')
-        : 'http://localhost:3030')
-    : 'http://192.168.1.176:3030'; // ← your PC LAN IP if needed
+const BASE_URL = API_URL;
+const AUTH = AUTH_HEADER;
 
 const FALLBACK_IMAGE = require('../../assets/soapbox-flier.png');
 
@@ -38,14 +25,14 @@ export default function Stories() {
   const [stories, setStories] = useState<Story[]>([]);
   const router = useRouter();
 
-
   const loadStories = async () => {
     try {
-      const r = await fetch(`${BASE_URL}/stories`, { headers: AUTH });
+      const r = await fetch(`${BASE_URL}/stories`, { headers: AUTH as any });
       const data = await r.json();
 
       const ids: Story['id'][] = ['Story1', 'Story2', 'Story3', 'Story4', 'Story5'];
       const byId = new Map<string, Story>();
+
       (Array.isArray(data) ? data : []).forEach((s: any) => {
         if (s?.id && ids.includes(s.id)) {
           byId.set(s.id, {
@@ -57,16 +44,10 @@ export default function Stories() {
         }
       });
 
-      const filled = ids.map(
-        id => byId.get(id) || ({ id, title: id.toUpperCase(), subtitle: '', thumbUrl: null } as Story)
-      );
+      const filled = ids.map(id => byId.get(id) || ({ id, title: id, subtitle: '', thumbUrl: null } as Story));
       setStories(filled);
     } catch {
-      setStories(
-        ['Story1', 'Story2', 'Story3', 'Story4', 'Story5'].map(
-          id => ({ id: id as Story['id'], title: id, subtitle: '', thumbUrl: null } as Story)
-        )
-      );
+      setStories(['Story1', 'Story2', 'Story3', 'Story4', 'Story5'].map(id => ({ id: id as Story['id'], title: id, subtitle: '', thumbUrl: null })));
     } finally {
       setLoading(false);
     }
@@ -74,15 +55,12 @@ export default function Stories() {
 
   useEffect(() => {
     loadStories();
-    const t = setInterval(loadStories, 30000); // refresh every 30s so metadata changes show up
+    const t = setInterval(loadStories, 30000);
     return () => clearInterval(t);
   }, []);
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: '#0b0d10' }}
-      contentContainerStyle={{ padding: 16 }}
-    >
+    <ScrollView style={{ flex: 1, backgroundColor: '#0b0d10' }} contentContainerStyle={{ padding: 16 }}>
       <LogoHeader />
 
       <Text style={styles.title}>This Week’s Top 5 Stories</Text>
@@ -136,5 +114,4 @@ const styles = StyleSheet.create({
   thumb: { width: '100%', height: 140, borderRadius: 10, marginBottom: 10, backgroundColor: '#0b0d10' },
   cardTitle: { color: '#e6edf3', fontWeight: '800', marginBottom: 4, fontSize: 16 },
   cardSubtitle: { color: '#9fb0c0' },
-
 });

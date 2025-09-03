@@ -15,15 +15,11 @@ import {
   View,
 } from 'react-native';
 
-const API_KEY = '99dnfneeekdegnrJJSN3JdenrsdnJ';
-const AUTH = { 'x-soapbox-key': API_KEY };
+// ✅ use the shared API config (no localhost, no hard-coded IPs)
+import { API_URL, AUTH_HEADER } from '../../lib/api';
 
-const BASE_URL =
-  Platform.OS === 'web'
-    ? (typeof window !== 'undefined'
-        ? window.location.origin.replace(/:\d+$/, ':3030')
-        : 'http://localhost:3030')
-    : 'http://192.168.1.176:3030';
+const BASE_URL = API_URL;
+const AUTH = AUTH_HEADER;
 
 type SpotItem = {
   id: string;
@@ -54,8 +50,6 @@ export default function SpotlightHome() {
     };
   }, []);
 
-
-  
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return items;
@@ -86,11 +80,10 @@ export default function SpotlightHome() {
           Your submission goes straight to Blue Collar Soapbox. It isn’t public. Nothing moves forward without your say-so.
         </Text>
 
-        <Pressable onPress={() => router.push('/spotlight-form')} style={styles.cta}>
-  <Ionicons name="mic-outline" size={18} color="#fff" />
-  <Text style={styles.ctaText}>Tell Us Your Story</Text>
-</Pressable>
-
+        <Pressable onPress={() => router.push('/spotlight/form')} style={styles.cta}>
+          <Ionicons name="mic-outline" size={18} color="#fff" />
+          <Text style={styles.ctaText}>Tell Us Your Story</Text>
+        </Pressable>
       </View>
 
       {/* Search + one-per-row list */}
@@ -104,19 +97,19 @@ export default function SpotlightHome() {
           style={styles.input}
         />
 
-       {filtered.map(item => {
-  const thumbUri =
-    item.thumb && (item.thumb.startsWith('http') ? item.thumb : `${BASE_URL}${item.thumb}`);
+        {filtered.map(item => {
+          const thumbUri =
+            item.thumb && (item.thumb.startsWith('http') ? item.thumb : `${BASE_URL}${item.thumb}`);
 
-  return (
-    <Pressable key={item.id} onPress={() => open(item.url)} style={styles.bigTile}>
-      {thumbUri ? (
-        <Image source={{ uri: thumbUri }} style={styles.bigThumb} resizeMode="cover" />
-      ) : null}
-      <Text numberOfLines={2} style={styles.bigTitle}>{item.title}</Text>
-    </Pressable>
-  );
-})}
+          return (
+            <Pressable key={item.id} onPress={() => open(item.url)} style={styles.bigTile}>
+              {thumbUri ? (
+                <Image source={{ uri: thumbUri }} style={styles.bigThumb} resizeMode="cover" />
+              ) : null}
+              <Text numberOfLines={2} style={styles.bigTitle}>{item.title}</Text>
+            </Pressable>
+          );
+        })}
 
         {!filtered.length ? (
           <Text style={{ color: '#8fa2b6', marginTop: 8 }}>No results.</Text>
@@ -132,12 +125,12 @@ const W = Dimensions.get('window').width;
 
 const styles = StyleSheet.create({
   banner: {
-  width: 290,                 // base width like your other headers
-  height: undefined,
-  aspectRatio: 16 / 9,
-  maxWidth: '90%',            // stays sane on small phones
-  transform: [{ scale: 1.78 }], // bump this up/down to taste
-},
+    width: 290,
+    height: undefined,
+    aspectRatio: 16 / 9,
+    maxWidth: '90%',
+    transform: [{ scale: 1.78 }],
+  },
   card: {
     backgroundColor: '#0f141b',
     borderWidth: 1,
@@ -169,11 +162,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   ctaText: { color: '#fff', fontWeight: '800' },
-
-  // One big centered card per row
-  bigTile: {
-    marginBottom: 12,
-  },
+  bigTile: { marginBottom: 12 },
   bigThumb: {
     width: '100%',
     aspectRatio: 16 / 9,
