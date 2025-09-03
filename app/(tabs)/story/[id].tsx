@@ -1,7 +1,7 @@
 // app/(tabs)/story/[id].tsx
 import { useFocusEffect } from '@react-navigation/native';
-import { Audio, AVPlaybackStatus } from 'expo-av';
-import * as Crypto from 'expo-crypto'; // for a stable-ish client id
+import { Audio, AVPlaybackStatus, ResizeMode, Video } from 'expo-av';
+import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -9,14 +9,13 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Linking,
   Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
+  View
 } from 'react-native';
 import LogoHeader from '../../../components/LogoHeader';
 import { API_URL, AUTH_HEADER } from '../../lib/api';
@@ -31,20 +30,10 @@ export default function StoryDetail() {
   const { id, title } = useLocalSearchParams<{ id: StoryId; title?: string }>();
   const router = useRouter();
 
+  // ----- audio (voicemail) -----
   const [vmLoading, setVmLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [status, setStatus] = useState<{ positionMillis?: number; durationMillis?: number }>({});
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const [ideasOpen, setIdeasOpen] = useState(false);
-  const [ideas, setIdeas] = useState<string[]>([]);
-  const [picking, setPicking] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [thumbnail, setThumbnail] = useState<string | null>(null);
-
-  // Witness feed state
-  const [witnesses, setWitnesses] = useState<Witness[]>([]);
-  const [deviceId, setDeviceId] = useState<string>('');
-
   const soundRef = useRef<Audio.Sound | null>(null);
   const vmUri = useMemo(() => `${BASE_URL}/voicemail/${id}`, [id]);
   const storyTitle = useMemo(() => (title ? String(title) : String(id)), [title, id]);
@@ -55,7 +44,12 @@ export default function StoryDetail() {
     setIsPlaying(!!s.isPlaying);
   }, []);
 
-  // Load prompts + thumbnail from metadata.json
+  // ----- metadata (ideas + thumbnail) -----
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [ideasOpen, setIdeasOpen] = useState(false);
+  const [ideas, setIdeas] = useState<string[]>([]);
+  const [thumbnail, setThumbnail] = useState<string | null>(null);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -85,42 +79,8 @@ export default function StoryDetail() {
         setThumbnail(null);
       }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [id]);
-
-  // Load witness list for this story
-  const loadWitnesses = useCallback(async () => {
-    try {
-      const r = await fetch(`${BASE_URL}/stories/${id}/witnesses`);
-      if (!r.ok) return;
-      const j = await r.json();
-      if (Array.isArray(j)) setWitnesses(j as Witness[]);
-    } catch {}
-  }, [id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadWitnesses();
-      return () => {};
-    }, [loadWitnesses])
-  );
-
-  // Generate a pseudo-stable ID per device (no PII)
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const seed = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        'soapbox:' + Date.now() + ':' + Math.random()
-      );
-      if (alive) setDeviceId(seed.slice(0, 16));
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const createSound = useCallback(
     async (autoPlay: boolean) => {
@@ -152,7 +112,7 @@ export default function StoryDetail() {
     }
   };
 
-  // Always autoplay when screen focuses; cleanup on blur
+  // autoplay when screen focuses; cleanup on blur
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -161,7 +121,7 @@ export default function StoryDetail() {
         await hardStopAndUnload();
         setVmLoading(true);
         try {
-          await createSound(true); // autoplay on every entry
+          await createSound(true);
         } catch {
           if (!cancelled) setVmLoading(false);
         }
@@ -194,7 +154,7 @@ export default function StoryDetail() {
     try {
       await hardStopAndUnload();
       setVmLoading(true);
-      await createSound(false); // reload, paused at 0
+      await createSound(false);
       setIsPlaying(false);
       setStatus(prev => ({ ...prev, positionMillis: 0 }));
     } catch {
@@ -210,7 +170,53 @@ export default function StoryDetail() {
     return `${mm}:${ss}`;
   };
 
-  // ===== Witness upload flow =====
+  // ----- witness feed state -----
+  const [witnesses, setWitnesses] = useState<Witness[]>([]);
+  const [deviceId, setDeviceId] = useState<string>('');
+  const [picking, setPicking] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  // stable-ish id for likes (no PII)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const seed = (await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        'soapbox:' + Date.now() + Math.random()
+      )).slice(0, 16);
+      if (alive) setDeviceId(seed);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const loadWitnesses = useCallback(async () => {
+    try {
+      const r = await fetch(`${BASE_URL}/stories/${id}/witnesses`);
+      const j = await r.json();
+      if (Array.isArray(j)) setWitnesses(j);
+    } catch {}
+  }, [id]);
+
+  useFocusEffect(useCallback(() => {
+    loadWitnesses();
+    return () => {};
+  }, [loadWitnesses]));
+
+  // like toggle -> server
+  const toggleLike = async (w: Witness) => {
+    try {
+      const r = await fetch(`${BASE_URL}/witness/like`, {
+        method: 'POST',
+        headers: { ...AUTH, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyId: id, witnessId: w.id, deviceId }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+      setWitnesses(prev => prev.map(it => it.id === w.id ? { ...it, likes: j.likes } : it));
+    } catch {}
+  };
+
+  // ----- upload flow -----
   const openRules = () => setRulesOpen(true);
 
   const ensurePickerPermission = async () => {
@@ -277,6 +283,7 @@ export default function StoryDetail() {
 
       const nameGuess = (String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4')
         .replace(/[^\w.\-]/g, '_');
+
       const typeGuess =
         asset.mimeType ||
         asset.file?.type ||
@@ -297,20 +304,21 @@ export default function StoryDetail() {
 
       const r = await fetch(`${BASE_URL}/witness`, {
         method: 'POST',
-        headers: AUTH, // don't set Content-Type manually for multipart
+        headers: AUTH,
         body: form,
         signal: controller.signal,
       }).finally(() => clearTimeout(timeout));
 
-      const j = await r.json().catch(() => null);
-
+      let j: any = null;
+      try { j = await r.json(); } catch {}
       if (!r.ok) {
-        throw new Error(j?.error || `HTTP ${r.status}`);
+        const msg = j?.error ? j.error : `HTTP ${r.status}`;
+        throw new Error(msg);
       }
 
-      // Add to local feed immediately
+      // add to local feed immediately
       setWitnesses(prev => [
-        { id: j?.id || String(Date.now()), uri: j?.uri, ts: Date.now(), likes: 0, likedBy: [] },
+        { id: j?.id || String(Date.now()), uri: `${BASE_URL}${j?.uri}`, ts: Date.now(), likes: 0, likedBy: [] },
         ...prev,
       ]);
 
@@ -319,44 +327,6 @@ export default function StoryDetail() {
       Alert.alert('Upload failed', String(e?.message || e));
     } finally {
       setUploading(false);
-    }
-  };
-
-  // Like toggle (uses server if available, otherwise optimistic only)
-  const toggleLike = async (w: Witness) => {
-    // optimistic
-    setWitnesses(prev =>
-      prev.map(it =>
-        it.id === w.id
-          ? {
-              ...it,
-              likes: it.likedBy?.includes(deviceId)
-                ? Math.max(0, (it.likes || 0) - 1)
-                : (it.likes || 0) + 1,
-              likedBy: it.likedBy?.includes(deviceId)
-                ? (it.likedBy || []).filter(x => x !== deviceId)
-                : [...(it.likedBy || []), deviceId],
-            }
-          : it
-      )
-    );
-
-    try {
-      const r = await fetch(`${BASE_URL}/witness/like`, {
-        method: 'POST',
-        headers: { ...AUTH, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storyId: id, witnessId: w.id, deviceId }),
-      });
-      const j = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
-
-      // reconcile with server count if provided
-      if (j && typeof j.likes === 'number') {
-        setWitnesses(prev => prev.map(it => (it.id === w.id ? { ...it, likes: j.likes } : it)));
-      }
-    } catch {
-      // on failure, reload list to be safe
-      loadWitnesses();
     }
   };
 
@@ -414,7 +384,7 @@ export default function StoryDetail() {
         <Text style={styles.btnWideBlueText}>Back</Text>
       </Pressable>
 
-      {/* ===== Witness feed (simple list) ===== */}
+      {/* Witness feed */}
       <View style={{ marginTop: 8 }}>
         <Text style={[styles.title, { marginBottom: 8 }]}>Witness Feed</Text>
 
@@ -427,39 +397,18 @@ export default function StoryDetail() {
                 key={w.id}
                 style={{
                   backgroundColor: '#0f141b',
-                  borderWidth: 1,
-                  borderColor: '#1e2630',
-                  borderRadius: 10,
-                  padding: 10,
+                  borderWidth: 1, borderColor: '#1e2630',
+                  borderRadius: 10, padding: 10
                 }}
               >
                 <Text style={{ color: '#e6edf3', marginBottom: 6 }}>
                   {new Date(w.ts).toLocaleString()}
                 </Text>
 
-                <Pressable
-                  onPress={() => Linking.openURL(`${BASE_URL}${w.uri}`)}
-                  style={{ marginBottom: 8 }}
-                >
-                  <Text style={{ color: '#7fb3ff', textDecorationLine: 'underline' }}>
-                    Open video
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => toggleLike(w)}
-                  style={{
-                    alignSelf: 'flex-start',
-                    backgroundColor: '#1f6feb',
-                    borderRadius: 8,
-                    paddingVertical: 6,
-                    paddingHorizontal: 10,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '800' }}>
-                    ❤️ {w.likes || 0}
-                  </Text>
-                </Pressable>
+                <WitnessPlayer
+                  item={{ id: w.id, uri: w.uri.startsWith('http') ? w.uri : `${BASE_URL}${w.uri}`, ts: w.ts, likes: w.likes }}
+                  onLike={() => toggleLike(w)}
+                />
               </View>
             ))}
           </View>
@@ -480,6 +429,7 @@ export default function StoryDetail() {
               • One upload per story per device
             </Text>
 
+            {/* Disclaimer on its own line, bold */}
             <Text style={[styles.modalText, { fontWeight: '800', marginTop: 10 }]}>
               By clicking "I Agree," below, you grant Marshall Patrick and Blue Collar Soapbox permission to use the uploaded video as content on any social media account owned or operated by Marshall Patrick and/or Blue Collar Soapbox
             </Text>
@@ -534,6 +484,98 @@ export default function StoryDetail() {
 
       <View style={{ height: 24 }} />
     </ScrollView>
+  );
+}
+
+/** Inline video player with single-tap toggle, replay-on-finish, and double-tap like */
+function WitnessPlayer({
+  item,
+  onLike,
+}: {
+  item: { id: string; uri: string; ts: number; likes: number };
+  onLike: () => void;
+}) {
+  const videoRef = useRef<Video | null>(null);
+  const [finished, setFinished] = useState(false);
+
+  // double-tap
+  const lastTap = useRef<number>(0);
+  const onPress = async () => {
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      // double tap => like
+      onLike();
+      return;
+    }
+    lastTap.current = now;
+
+    try {
+      const v = videoRef.current;
+      if (!v) return;
+
+      if (finished) {
+        await v.setPositionAsync(0);
+        await v.playAsync();
+        setFinished(false);
+        return;
+      }
+
+      const st: any = await v.getStatusAsync();
+      if (!st.isLoaded) return;
+
+      if (st.isPlaying) {
+        await v.pauseAsync();
+      } else {
+        const dur = st.durationMillis ?? 0;
+        const pos = st.positionMillis ?? 0;
+        if (dur && pos >= dur - 500) {
+          await v.setPositionAsync(0);
+        }
+        await v.playAsync();
+      }
+    } catch {}
+  };
+
+  const onStatusUpdate = (s: any) => {
+    if (s?.didJustFinish) setFinished(true);
+  };
+
+  return (
+    <Pressable onPress={onPress}>
+      <View>
+        <Video
+          ref={videoRef}
+          source={{ uri: item.uri }}
+          useNativeControls
+          style={{
+            width: '100%',
+            aspectRatio: 16 / 9,
+            backgroundColor: '#000',
+            borderRadius: 8,
+            marginBottom: 8,
+          }}
+          resizeMode={ResizeMode.CONTAIN}
+          onPlaybackStatusUpdate={onStatusUpdate}
+        />
+
+        {/* bottom-right like counter */}
+        <View
+          style={{
+            position: 'absolute',
+            right: 10,
+            bottom: 12,
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: '#233041',
+          }}
+        >
+          <Text style={{ color: '#fff', fontWeight: '800' }}>❤️ {item.likes || 0}</Text>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
