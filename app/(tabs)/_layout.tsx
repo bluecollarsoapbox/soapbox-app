@@ -47,14 +47,14 @@ export default function TabLayout() {
 
       {/* SPOTLIGHT */}
       <Tabs.Screen
-        name="spotlight/Spotlight"   // 👈 must match your file path
+        name="spotlight/index"  // now matches app/(tabs)/spotlight/index.tsx
         options={{
           title: 'Spotlight',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="mic-outline" color={color} size={size} />
-    ),
-  }}
-/>
+          ),
+        }}
+      />
 
       {/* LINKS */}
       <Tabs.Screen
@@ -73,15 +73,15 @@ export default function TabLayout() {
       <Tabs.Screen name="breaking" options={{ href: null }} />
       <Tabs.Screen name="story/[id]" options={{ href: null }} />
       <Tabs.Screen name="spotify-collab" options={{ href: null }} />
-      <Tabs.Screen
-  name="spotlight-form"
-  options={{
-    href: null,         // hidden from the tab bar
-    headerShown: false, // no back header
-    
-  }}
-/>
 
+      {/* Spotlight form (hidden) */}
+      <Tabs.Screen
+        name="spotlight/form"   // now matches app/(tabs)/spotlight/form.tsx
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
     </Tabs>
   );
 }

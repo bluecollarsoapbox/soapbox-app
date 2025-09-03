@@ -15,16 +15,10 @@ import {
   View,
 } from 'react-native';
 
-
-const API_KEY = '99dnfneeekdegnrJJSN3JdenrsdnJ';
-const AUTH = { 'x-soapbox-key': API_KEY };
-
-const BASE_URL =
-  Platform.OS === 'web'
-    ? (typeof window !== 'undefined'
-        ? window.location.origin.replace(/:\d+$/, ':3030')
-        : 'http://localhost:3030')
-    : 'http://192.168.1.176:3030';
+// shared API config (correct relative path from here)
+import { API_URL, AUTH_HEADER } from '../../lib/api';
+const BASE_URL = API_URL;
+const AUTH = AUTH_HEADER;
 
 export default function SpotlightForm() {
   const router = useRouter();
@@ -86,7 +80,8 @@ export default function SpotlightForm() {
       }
 
       Alert.alert('Thanks!', 'Your submission was sent to Blue Collar Soapbox.');
-      // ✅ Clear everything after success
+
+      // reset fields
       setName('');
       setEmail('');
       setPhone('');
@@ -96,9 +91,6 @@ export default function SpotlightForm() {
       setDetails('');
       setCompanies('');
       setConsent(false);
-
-      // Optional: kick back to landing after a moment
-      // setTimeout(() => router.back(), 600);
     } catch (e: any) {
       Alert.alert('Submit failed', String(e?.message || e));
     } finally {
@@ -109,14 +101,13 @@ export default function SpotlightForm() {
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#0b0d10' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 14 }} keyboardShouldPersistTaps="handled">
-        {/* Compact banner to match your headers */}
         <View style={{ alignItems: 'center' }}>
-  <Image
-  source={require('../../assets/spotlight-banner.png')}
-  style={{ width: 380, height: undefined, aspectRatio: 16/9, maxWidth: '90%', transform: [{ scale: 1.8 }] }}
-  resizeMode="contain"
-/>
-</View>
+          <Image
+            source={require('../../../assets/spotlight-banner.png')}
+            style={{ width: 380, height: undefined, aspectRatio: 16/9, maxWidth: '90%', transform: [{ scale: 1.8 }] }}
+            resizeMode="contain"
+          />
+        </View>
 
         <View style={styles.card}>
           <Text style={styles.title}>Tell Us Your Story</Text>
@@ -244,13 +235,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const styles = StyleSheet.create({
-  banner: {
-  width: 380,
-  height: undefined,
-  aspectRatio: 16 / 9,
-  maxWidth: '90%',
-  transform: [{ scale: 1.8 }],
-},
   card: {
     backgroundColor: '#0f141b',
     borderWidth: 1,

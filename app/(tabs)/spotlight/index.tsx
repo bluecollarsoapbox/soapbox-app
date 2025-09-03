@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 
-// ✅ use the shared API config (no localhost, no hard-coded IPs)
+// shared API config
 import { API_URL, AUTH_HEADER } from '../../lib/api';
 
 const BASE_URL = API_URL;
@@ -60,7 +60,6 @@ export default function SpotlightHome() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#0b0d10' }} contentContainerStyle={{ padding: 16, gap: 16 }}>
-      {/* Banner */}
       <View style={{ alignItems: 'center' }}>
         <Image
           source={require('../../../assets/spotlight-banner.png')}
@@ -69,7 +68,6 @@ export default function SpotlightHome() {
         />
       </View>
 
-      {/* Intro card + CTA */}
       <View style={styles.card}>
         <Text style={styles.title}>Soapbox Spotlight</Text>
         <Text style={styles.body}>
@@ -80,13 +78,13 @@ export default function SpotlightHome() {
           Your submission goes straight to Blue Collar Soapbox. It isn’t public. Nothing moves forward without your say-so.
         </Text>
 
+        {/* ✅ This route will exist once form.tsx is in the folder */}
         <Pressable onPress={() => router.push('/spotlight/form')} style={styles.cta}>
           <Ionicons name="mic-outline" size={18} color="#fff" />
           <Text style={styles.ctaText}>Tell Us Your Story</Text>
         </Pressable>
       </View>
 
-      {/* Search + one-per-row list */}
       <View style={styles.card}>
         <Text style={styles.section}>Spotlights</Text>
         <TextInput
@@ -98,9 +96,7 @@ export default function SpotlightHome() {
         />
 
         {filtered.map(item => {
-          const thumbUri =
-            item.thumb && (item.thumb.startsWith('http') ? item.thumb : `${BASE_URL}${item.thumb}`);
-
+          const thumbUri = item.thumb && (item.thumb.startsWith('http') ? item.thumb : `${BASE_URL}${item.thumb}`);
           return (
             <Pressable key={item.id} onPress={() => open(item.url)} style={styles.bigTile}>
               {thumbUri ? (
