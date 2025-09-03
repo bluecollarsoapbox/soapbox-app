@@ -1,6 +1,7 @@
 // app/(tabs)/story/[id].tsx
 import { useFocusEffect } from '@react-navigation/native';
 import { Audio, AVPlaybackStatus } from 'expo-av';
+import * as Crypto from 'expo-crypto'; // for a stable-ish client id
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -8,23 +9,23 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from 'react-native';
 import LogoHeader from '../../../components/LogoHeader';
-// was: import { API_URL, AUTH_HEADER } from '@/lib/api';
 import { API_URL, AUTH_HEADER } from '../../lib/api';
-
 
 const BASE_URL = API_URL;
 const AUTH = AUTH_HEADER;
 
 type StoryId = 'Story1' | 'Story2' | 'Story3' | 'Story4' | 'Story5';
+type Witness = { id: string; uri: string; ts: number; likes: number; likedBy?: string[] };
 
 export default function StoryDetail() {
   const { id, title } = useLocalSearchParams<{ id: StoryId; title?: string }>();
@@ -39,6 +40,10 @@ export default function StoryDetail() {
   const [picking, setPicking] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | null>(null);
+
+  // Witness feed state
+  const [witnesses, setWitnesses] = useState<Witness[]>([]);
+  const [deviceId, setDeviceId] = useState<string>('');
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const vmUri = useMemo(() => `${BASE_URL}/voicemail/${id}`, [id]);
@@ -56,7 +61,7 @@ export default function StoryDetail() {
     (async () => {
       const metaUrl = `${BASE_URL}/static/${id}/metadata.json`;
       try {
-        const r = await fetch(metaUrl); // static should be public; no auth header
+        const r = await fetch(metaUrl);
         if (!r.ok) {
           console.warn(`[story/${String(id)}] metadata fetch failed ${r.status} at ${metaUrl}`);
           return;
@@ -84,6 +89,38 @@ export default function StoryDetail() {
       alive = false;
     };
   }, [id]);
+
+  // Load witness list for this story
+  const loadWitnesses = useCallback(async () => {
+    try {
+      const r = await fetch(`${BASE_URL}/stories/${id}/witnesses`);
+      if (!r.ok) return;
+      const j = await r.json();
+      if (Array.isArray(j)) setWitnesses(j as Witness[]);
+    } catch {}
+  }, [id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadWitnesses();
+      return () => {};
+    }, [loadWitnesses])
+  );
+
+  // Generate a pseudo-stable ID per device (no PII)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const seed = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        'soapbox:' + Date.now() + ':' + Math.random()
+      );
+      if (alive) setDeviceId(seed.slice(0, 16));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const createSound = useCallback(
     async (autoPlay: boolean) => {
@@ -176,9 +213,8 @@ export default function StoryDetail() {
   // ===== Witness upload flow =====
   const openRules = () => setRulesOpen(true);
 
-  // Permissions (expo-image-picker: 'granted' or 'denied')
   const ensurePickerPermission = async () => {
-    if (Platform.OS === 'web') return true; // web doesn't need this
+    if (Platform.OS === 'web') return true;
     const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       const req = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -187,10 +223,8 @@ export default function StoryDetail() {
     return true;
   };
 
-  // Videos only — stable across SDKs (fine to keep even if warned as deprecated)
   const videoOnlyMediaTypes = ImagePicker.MediaTypeOptions.Videos as const;
 
-  // Open picker (returns chosen asset or null)
   const launchPicker = async () => {
     const ok = await ensurePickerPermission();
     if (!ok) {
@@ -214,15 +248,12 @@ export default function StoryDetail() {
     return asset;
   };
 
-  // IMPORTANT: open picker directly from the button's onPress (same user gesture)
   const onAgreeAndPick = async () => {
     if (picking) return;
-    setPicking(true); // show spinner on the button
-
+    setPicking(true);
     try {
-      const asset = await launchPicker(); // open picker *before* closing modal
-      setRulesOpen(false); // close after picker returns
-
+      const asset = await launchPicker();
+      setRulesOpen(false);
       if (!asset) return;
 
       Alert.alert(
@@ -241,58 +272,93 @@ export default function StoryDetail() {
   };
 
   const actuallyUpload = async (asset: any) => {
-  try {
-    setUploading(true);
+    try {
+      setUploading(true);
 
-    const nameGuess = (String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4')
-      .replace(/[^\w.\-]/g, '_');
+      const nameGuess = (String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4')
+        .replace(/[^\w.\-]/g, '_');
+      const typeGuess =
+        asset.mimeType ||
+        asset.file?.type ||
+        (nameGuess.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4');
 
-    const typeGuess =
-      asset.mimeType ||
-      asset.file?.type ||
-      (nameGuess.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4');
+      const form = new FormData();
+      form.append('storyId', String(id));
+      form.append('note', '');
 
-    const form = new FormData();
-    form.append('storyId', String(id));
-    form.append('note', '');
+      if (Platform.OS === 'web' && asset.file instanceof File) {
+        form.append('video', asset.file, asset.file.name || nameGuess);
+      } else {
+        form.append('video', { uri: asset.uri, name: nameGuess, type: typeGuess } as any);
+      }
 
-    if (Platform.OS === 'web' && asset.file instanceof File) {
-      // ✅ Web: send the actual File object
-      form.append('video', asset.file, asset.file.name || nameGuess);
-    } else {
-      // ✅ iOS/Android: send the file via URI
-      form.append('video', { uri: asset.uri, name: nameGuess, type: typeGuess } as any);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180_000);
+
+      const r = await fetch(`${BASE_URL}/witness`, {
+        method: 'POST',
+        headers: AUTH, // don't set Content-Type manually for multipart
+        body: form,
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+
+      const j = await r.json().catch(() => null);
+
+      if (!r.ok) {
+        throw new Error(j?.error || `HTTP ${r.status}`);
+      }
+
+      // Add to local feed immediately
+      setWitnesses(prev => [
+        { id: j?.id || String(Date.now()), uri: j?.uri, ts: Date.now(), likes: 0, likedBy: [] },
+        ...prev,
+      ]);
+
+      Alert.alert('Uploaded', 'Your video was posted to the witness feed.');
+    } catch (e: any) {
+      Alert.alert('Upload failed', String(e?.message || e));
+    } finally {
+      setUploading(false);
     }
+  };
 
-    // Give uploads more breathing room (3 minutes)
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 180_000);
+  // Like toggle (uses server if available, otherwise optimistic only)
+  const toggleLike = async (w: Witness) => {
+    // optimistic
+    setWitnesses(prev =>
+      prev.map(it =>
+        it.id === w.id
+          ? {
+              ...it,
+              likes: it.likedBy?.includes(deviceId)
+                ? Math.max(0, (it.likes || 0) - 1)
+                : (it.likes || 0) + 1,
+              likedBy: it.likedBy?.includes(deviceId)
+                ? (it.likedBy || []).filter(x => x !== deviceId)
+                : [...(it.likedBy || []), deviceId],
+            }
+          : it
+      )
+    );
 
-    const r = await fetch(`${BASE_URL}/witness`, {
-      method: 'POST',
-      headers: AUTH, // DO NOT set Content-Type for multipart — let the browser/native set it
-      body: form,
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+    try {
+      const r = await fetch(`${BASE_URL}/witness/like`, {
+        method: 'POST',
+        headers: { ...AUTH, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyId: id, witnessId: w.id, deviceId }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
 
-    if (!r.ok) {
-      // Try to read server error for better visibility
-      let msg = `HTTP ${r.status}`;
-      try {
-        const j = await r.json();
-        if (j?.error) msg = j.error;
-      } catch {}
-      throw new Error(msg);
+      // reconcile with server count if provided
+      if (j && typeof j.likes === 'number') {
+        setWitnesses(prev => prev.map(it => (it.id === w.id ? { ...it, likes: j.likes } : it)));
+      }
+    } catch {
+      // on failure, reload list to be safe
+      loadWitnesses();
     }
-
-    Alert.alert('Uploaded', 'Your video was posted to the witness feed.');
-  } catch (e: any) {
-    Alert.alert('Upload failed', String(e?.message || e));
-  } finally {
-    setUploading(false);
-  }
-};
-
+  };
 
   return (
     <ScrollView
@@ -348,6 +414,58 @@ export default function StoryDetail() {
         <Text style={styles.btnWideBlueText}>Back</Text>
       </Pressable>
 
+      {/* ===== Witness feed (simple list) ===== */}
+      <View style={{ marginTop: 8 }}>
+        <Text style={[styles.title, { marginBottom: 8 }]}>Witness Feed</Text>
+
+        {!witnesses.length ? (
+          <Text style={{ color: '#9fb0c0' }}>No witness videos yet.</Text>
+        ) : (
+          <View style={{ gap: 10 }}>
+            {witnesses.map(w => (
+              <View
+                key={w.id}
+                style={{
+                  backgroundColor: '#0f141b',
+                  borderWidth: 1,
+                  borderColor: '#1e2630',
+                  borderRadius: 10,
+                  padding: 10,
+                }}
+              >
+                <Text style={{ color: '#e6edf3', marginBottom: 6 }}>
+                  {new Date(w.ts).toLocaleString()}
+                </Text>
+
+                <Pressable
+                  onPress={() => Linking.openURL(`${BASE_URL}${w.uri}`)}
+                  style={{ marginBottom: 8 }}
+                >
+                  <Text style={{ color: '#7fb3ff', textDecorationLine: 'underline' }}>
+                    Open video
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => toggleLike(w)}
+                  style={{
+                    alignSelf: 'flex-start',
+                    backgroundColor: '#1f6feb',
+                    borderRadius: 8,
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>
+                    ❤️ {w.likes || 0}
+                  </Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
       {/* Rules modal */}
       <Modal visible={rulesOpen} transparent animationType="fade" onRequestClose={() => setRulesOpen(false)}>
         <View style={styles.modalWrap}>
@@ -362,7 +480,6 @@ export default function StoryDetail() {
               • One upload per story per device
             </Text>
 
-            {/* Disclaimer on its own line, bold */}
             <Text style={[styles.modalText, { fontWeight: '800', marginTop: 10 }]}>
               By clicking "I Agree," below, you grant Marshall Patrick and Blue Collar Soapbox permission to use the uploaded video as content on any social media account owned or operated by Marshall Patrick and/or Blue Collar Soapbox
             </Text>
