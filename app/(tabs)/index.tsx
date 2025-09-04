@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import LogoHeader from '../../components/LogoHeader';
+console.log('API_URL ->', API_URL);
 
 // ✅ shared API config (points at Render)
 import { API_URL, AUTH_HEADER } from '../lib/api';
