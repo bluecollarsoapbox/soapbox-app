@@ -48,7 +48,7 @@ export default function Stories() {
       const filled = ids.map(id => byId.get(id) || ({ id, title: id, subtitle: '', thumbUrl: null } as Story));
       setStories(filled);
     } catch {
-      setStories(['Story1', 'Story2', 'Story3', 'Story4', 'Story5'].map(id => ({ id: id as Story['id'], title: id, subtitle: '', thumbUrl: null })));
+      setStories(['Story1', 'Story2', 'Story3', 'Story4', '5'].map(id => ({ id: id as Story['id'], title: id, subtitle: '', thumbUrl: null })));
     } finally {
       setLoading(false);
     }
