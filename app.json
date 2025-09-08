@@ -2,8 +2,12 @@
   "expo": {
     "...": "...",
     "extra": {
-      "EXPO_PUBLIC_API_URL": "http://192.168.1.176:3030",
-      "EXPO_PUBLIC_API_KEY": "99dnfneeekdegnrJJSN3JdenrsdnJ"
+      "EXPO_PUBLIC_API_URL": "https://soapbox-server.onrender.com",
+      "EXPO_PUBLIC_API_KEY": "99dnfneeekdegnrJJSN3JdenrsdnJ",
+      "router": {},
+      "eas": {
+        "projectId": "175b2d12-46d2-43f2-bc1b-a7435b6af23d"
+      }
     },
     "plugins": [
       "expo-router"
@@ -20,6 +24,7 @@
           "discord"
         ]
       }
-    }
+    },
+    "owner": "marshallp83"
   }
 }
