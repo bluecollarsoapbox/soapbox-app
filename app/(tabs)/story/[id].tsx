@@ -15,7 +15,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
+  Linking
 } from 'react-native';
 import LogoHeader from '../../../components/LogoHeader';
 import { API_URL, AUTH_HEADER } from '../../lib/api';
@@ -190,19 +191,16 @@ export default function StoryDetail() {
   }, []);
 
   const loadWitnesses = useCallback(async () => {
-    try {
-      const r = await fetch(`${BASE_URL}/stories/${id}/witnesses`);
-      const j = await r.json();
-      if (Array.isArray(j)) setWitnesses(j);
-    } catch {}
-  }, [id]);
+    // feed disabled: do nothing and keep empty
+    setWitnesses([]);
+  }, []);
 
   useFocusEffect(useCallback(() => {
     loadWitnesses();
     return () => {};
   }, [loadWitnesses]));
 
-  // like toggle -> server
+  // like toggle -> server (kept for compatibility, even if feed is hidden)
   const toggleLike = async (w: Witness) => {
     try {
       const r = await fetch(`${BASE_URL}/witness/like`, {
@@ -316,13 +314,8 @@ export default function StoryDetail() {
         throw new Error(msg);
       }
 
-      // add to local feed immediately
-      setWitnesses(prev => [
-        { id: j?.id || String(Date.now()), uri: `${BASE_URL}${j?.uri}`, ts: Date.now(), likes: 0, likedBy: [] },
-        ...prev,
-      ]);
-
-      Alert.alert('Uploaded', 'Your video was posted to the witness feed.');
+      // feed disabled; upload still goes to Discord via server
+      Alert.alert('Uploaded', 'Thanks! Your video was submitted. You can view witness videos in our Discord.');
     } catch (e: any) {
       Alert.alert('Upload failed', String(e?.message || e));
     } finally {
@@ -380,39 +373,27 @@ export default function StoryDetail() {
       </Pressable>
 
       {/* Back button (blue) BELOW submit */}
-      <Pressable onPress={() => router.back()} style={styles.btnWideBlue}>
-        <Text style={styles.btnWideBlueText}>Back</Text>
-      </Pressable>
+      {/* REMOVED per request */}
 
-      {/* Witness feed */}
+      {/* Witness feed (disabled) -> point to Discord Breaking News channel */}
       <View style={{ marginTop: 8 }}>
-        <Text style={[styles.title, { marginBottom: 8 }]}>Witness Feed</Text>
+        <Text style={[styles.title, { marginBottom: 8 }]}>Witness Videos</Text>
 
-        {!witnesses.length ? (
-          <Text style={{ color: '#9fb0c0' }}>No witness videos yet.</Text>
-        ) : (
-          <View style={{ gap: 10 }}>
-            {witnesses.map(w => (
-              <View
-                key={w.id}
-                style={{
-                  backgroundColor: '#0f141b',
-                  borderWidth: 1, borderColor: '#1e2630',
-                  borderRadius: 10, padding: 10
-                }}
-              >
-                <Text style={{ color: '#e6edf3', marginBottom: 6 }}>
-                  {new Date(w.ts).toLocaleString()}
-                </Text>
-
-                <WitnessPlayer
-                  item={{ id: w.id, uri: w.uri.startsWith('http') ? w.uri : `${BASE_URL}${w.uri}`, ts: w.ts, likes: w.likes }}
-                  onLike={() => toggleLike(w)}
-                />
-              </View>
-            ))}
-          </View>
-        )}
+        <View style={{ backgroundColor: '#0f141b', borderWidth: 1, borderColor: '#1e2630', borderRadius: 10, padding: 12 }}>
+          <Text style={{ color: '#cfe0ff', marginBottom: 8, fontWeight: '700' }}>
+            Witness videos for this story are shared anonymously in our Discord Breaking News channel. The best ones will be used in a Soapbox News video as a "witness" to the story!
+          </Text>
+          <Pressable
+            onPress={() =>
+              Linking.openURL(
+                'https://discord.com/channels/YOUR_SERVER_ID/1407176815285637313'
+              )
+            }
+            style={styles.btnPrimary}
+          >
+            <Text style={styles.btnPrimaryText}>Open Breaking News</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Rules modal */}

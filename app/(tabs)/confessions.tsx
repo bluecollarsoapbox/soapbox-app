@@ -10,8 +10,12 @@ import {
   Text,
   TextInput,
   View,
+  Linking
 } from 'react-native';
 import LogoHeader from '../../components/LogoHeader';
+export const SHOW_WITNESS_FEED = false;
+export const SHOW_CONFESSION_FEED = false;
+
 
 // ✅ shared API config (points at Render)
 import { API_URL, AUTH_HEADER } from '../lib/api';
@@ -32,6 +36,7 @@ export default function Confessions() {
   const [items, setItems] = useState<Confession[]>([]);
   const [text, setText] = useState('');
 
+  // --- FEED DISABLED: keep loader function but don't call it ---
   const load = async () => {
     try {
       setLoading(true);
@@ -47,8 +52,9 @@ export default function Confessions() {
     }
   };
 
+  // --- FEED DISABLED: no initial load ---
   useEffect(() => {
-    load();
+    setLoading(false);
   }, []);
 
   const submit = async () => {
@@ -67,7 +73,8 @@ export default function Confessions() {
 
       setText('');
       Alert.alert('Sent', 'Your confession was posted.');
-      load();
+      // --- FEED DISABLED: don't reload a local feed ---
+      // load();
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Could not submit.');
     } finally {
@@ -86,7 +93,7 @@ export default function Confessions() {
     <ScrollView style={{ flex: 1, backgroundColor: '#0b0d10' }} contentContainerStyle={{ padding: 16 }}>
       <LogoHeader />
       <Text style={styles.title}>Anonymous Confessions</Text>
-      <Text style={styles.caption}>Post something real. We moderate for spam and extreme content.</Text>
+      <Text style={styles.caption}>Post something real. We trust no lies will be told here. Right?</Text>
 
       <View style={styles.box}>
         <TextInput
@@ -104,7 +111,18 @@ export default function Confessions() {
         </Pressable>
       </View>
 
-      <Text style={styles.sectionTitle}>Recent Confessions</Text>
+      {/* --- FEED DISABLED: replace list with Discord notice --- */}
+      <Text style={styles.sectionTitle}>Where to read confessions</Text>
+      <View style={styles.noticeCard}>
+        <Text style={{ color: '#cfe0ff', marginBottom: 8, fontWeight: '700' }}>
+          Confessions are posted ANNONYMOUSLY by our Soapbox News bot in Discord. No data is collected, Nobody knows who tf you are. Check out the channel to read them!
+        </Text>
+        <Pressable onPress={() => Linking.openURL('https://discord.gg/SoapBox')} style={styles.btn}>
+          <Text style={styles.btnText}>Open Discord</Text>
+        </Pressable>
+      </View>
+
+      {/* Old feed UI left here for reference, but disabled:
       {loading ? (
         <View style={{ paddingVertical: 20, alignItems: 'center' }}>
           <ActivityIndicator color="#fff" />
@@ -120,6 +138,7 @@ export default function Confessions() {
           scrollEnabled={false}
         />
       )}
+      */}
     </ScrollView>
   );
 }
@@ -145,6 +164,14 @@ const styles = StyleSheet.create({
   },
   btnText: { color: '#fff', fontWeight: '800' },
   sectionTitle: { color: '#cfe0ff', fontWeight: '800', fontSize: 16, marginBottom: 8 },
+  noticeCard: {
+    backgroundColor: '#11161b',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e2935',
+    padding: 12,
+    marginBottom: 10,
+  },
   card: {
     backgroundColor: '#11161b',
     borderRadius: 12,

@@ -70,8 +70,7 @@ export default function Hotline() {
 
         <View style={[styles.card, { width: Math.min(screenW * 0.92, 640) }]}>
           <Text style={styles.cardText}>
-            Leave your rant, story, or confession. We pick the best voicemails every week and turn them into Soapbox News.
-          </Text>
+            This is the heartbeat of the Soapbox! All the news stories come from THESE voicemails! Leave your rant, story, or confession. We pick the best voicemails every week and turn them into Soapbox News Stories. Totally Anonymous, Totally Real.</Text>
         </View>
       </ScrollView>
     </Background>
@@ -80,7 +79,7 @@ export default function Hotline() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16, alignItems: 'center' },
+  content: { padding: 12, alignItems: 'center' },
 
   title: {
     color: '#e8f0ff',
@@ -115,14 +114,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  buttonText: { color: '#fff', fontWeight: '700', fontSize: 20 },
 
   card: {
     backgroundColor: '#14181d',
     borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#1f2731',
+    padding: 12,
+    borderWidth: 2,
+    borderColor: '#313942ff',
     alignSelf: 'center',
   },
   cardText: { color: '#e8f0ff', textAlign: 'center' },
