@@ -300,18 +300,38 @@ export default function StoryDetail() {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 180_000);
 
-      const r = await fetch(`${BASE_URL}/witness`, {
-        method: 'POST',
-        headers: AUTH,
-        body: form,
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeout));
+      // Try primary path first
+      const tryOnce = async (url: string) => {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: AUTH,
+          body: form,
+          signal: controller.signal,
+        });
 
-      let j: any = null;
-      try { j = await r.json(); } catch {}
+        let bodyJson: any = null;
+        let bodyText: string | undefined;
+        try { bodyJson = await r.json(); } catch { try { bodyText = await r.text(); } catch {} }
+
+        return { r, bodyJson, bodyText, url };
+      };
+
+      let { r, bodyJson, bodyText, url } = await tryOnce(`${BASE_URL}/witness`);
+
+      // If auth/path issue, retry against /api/witness once
+      if (!r.ok && [401, 404, 405].includes(r.status)) {
+        ({ r, bodyJson, bodyText, url } = await tryOnce(`${BASE_URL}/api/witness`));
+      }
+
+      clearTimeout(timeout);
+
       if (!r.ok) {
-        const msg = j?.error ? j.error : `HTTP ${r.status}`;
-        throw new Error(msg);
+        const msg = (bodyJson && (bodyJson.error || bodyJson.message)) || bodyText || `HTTP ${r.status}`;
+        Alert.alert(
+          'Upload failed',
+          `URL: ${url}\nStatus: ${r.status}\n${msg}\n\n(API key sent: ${!!(AUTH as any)['x-soapbox-key']})`
+        );
+        return;
       }
 
       // feed disabled; upload still goes to Discord via server
