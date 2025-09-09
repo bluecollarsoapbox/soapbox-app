@@ -1,7 +1,15 @@
 {
-  "cli": { "version": ">= 12.0.0" },
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
   "build": {
-    "preview": { "android": { "withoutCredentials": false }, "ios": {} },
+    "preview": {
+      "android": {
+        "withoutCredentials": false
+      },
+      "ios": {}
+    },
     "production": {
       "developmentClient": false,
       "autoIncrement": true

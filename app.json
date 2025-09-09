@@ -25,6 +25,9 @@
         ]
       }
     },
-    "owner": "marshallp83"
+    "owner": "marshallp83",
+    "android": {
+      "package": "com.marshallp83.soapbox"
+    }
   }
 }
