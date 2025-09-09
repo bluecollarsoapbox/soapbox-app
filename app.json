@@ -1,18 +1,24 @@
 {
   "expo": {
-    "...": "...",
-    "extra": {
-      "EXPO_PUBLIC_API_URL": "https://soapbox-server.onrender.com",
-      "EXPO_PUBLIC_API_KEY": "99dnfneeekdegnrJJSN3JdenrsdnJ",
-      "router": {},
-      "eas": {
-        "projectId": "175b2d12-46d2-43f2-bc1b-a7435b6af23d"
-      }
+    "name": "Soapbox",
+    "slug": "soapbox",
+    "scheme": "soapbox",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b0d10"
     },
-    "plugins": [
-      "expo-router"
-    ],
+    "updates": {
+      "url": "https://u.expo.dev/175b2d12-46d2-43f2-bc1b-a7435b6af23d"
+    },
+    "runtimeVersion": { "policy": "sdkVersion" },
+
     "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bluecollar.soapbox",
       "infoPlist": {
         "LSApplicationQueriesSchemes": [
           "spotify",
@@ -25,9 +31,25 @@
         ]
       }
     },
-    "owner": "marshallp83",
+
     "android": {
-      "package": "com.marshallp83.soapbox"
-    }
+      "package": "com.bluecollar.soapbox",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0b0d10"
+      }
+    },
+
+    "web": { "bundler": "metro" },
+    "plugins": ["expo-router"],
+    "experiments": { "typedRoutes": true },
+
+    "extra": {
+      "EXPO_PUBLIC_API_URL": "https://soapbox-server.onrender.com",
+      "EXPO_PUBLIC_API_KEY": "99dnfneeekdegnrJJSN3JdenrsdnJ",
+      "eas": { "projectId": "175b2d12-46d2-43f2-bc1b-a7435b6af23d" }
+    },
+
+    "owner": "marshallp83"
   }
 }
