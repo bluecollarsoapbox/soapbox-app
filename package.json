@@ -13,9 +13,7 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
-    "@react-navigation/native": "^7.1.6",
     "expo": "^54.0.7",
     "expo-audio": "~1.0.11",
     "expo-av": "~16.0.7",
@@ -59,5 +57,6 @@
     "schema-utils": "^4.2.0",
     "typescript": "~5.4.0"
   },
-  "private": true
+  "private": true,
+  "overrides": {}
 }
