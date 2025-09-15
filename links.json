@@ -1,0 +1,13 @@
+{
+  "items": [
+    { "title": "YouTube",   "url": "https://www.youtube.com/@bluecollarsoapbox", "imageKey": "links/youtube.png" },
+    { "title": "Discord",   "url": "https://discord.gg/SoapBox",                  "imageKey": "links/discord.png" },
+    { "title": "Twitch",    "url": "https://www.twitch.tv/themarshallpatrick",   "imageKey": "links/twitch.png" },
+    { "title": "Spotify",   "url": "https://open.spotify.com/user/31qsebtdwdt6g4tzkanmz3zjyhpe", "imageKey": "links/spotify.png" },
+    { "title": "Facebook",  "url": "https://www.facebook.com/bluecollarsoapbox", "imageKey": "links/facebook.png" },
+    { "title": "Instagram", "url": "https://www.instagram.com/bluecollarsoapbox/","imageKey": "links/instagram.png" },
+    { "title": "TikTok",    "url": "https://www.tiktok.com/@bluecollarsoapbox",  "imageKey": "links/tiktok.png" },
+    { "title": "Website",   "url": "https://www.bluecollarsoapbox.com",          "imageKey": "links/website.png" },
+    { "title": "Store",     "url": "https://www.marshallpatrick.com/collections/blue-collar-soapbox", "imageKey": "links/merch.png" }
+  ]
+}
