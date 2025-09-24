@@ -1,4 +1,3 @@
-// app/(tabs)/spotlight/index.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -15,16 +14,15 @@ import {
   View,
 } from 'react-native';
 
-// shared API config
-import { API_URL, AUTH_HEADER } from '../../lib/api';
+// ✅ Only import what's guaranteed to exist in your api.ts
+import { API_URL } from '../../lib/api';
 
 const BASE_URL = API_URL;
-const AUTH = AUTH_HEADER;
 
 type SpotItem = {
   id: string;
   title: string;
-  thumb: string;
+  thumb?: string;
   url: string;
   date?: string;
 };
@@ -38,25 +36,31 @@ export default function SpotlightHome() {
     let alive = true;
     (async () => {
       try {
-        const r = await fetch(`${BASE_URL}/spotlight-videos`, { headers: AUTH as any });
+        // No auth headers needed
+        const r = await fetch(`${BASE_URL}/spotlights`);
         const j = await r.json();
         if (alive && Array.isArray(j)) setItems(j);
       } catch {
-        // ignore
+        // ignore; empty state will show
       }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return items;
-    return items.filter(it => it.title.toLowerCase().includes(s));
+    return items.filter(it => it.title?.toLowerCase().includes(s));
   }, [q, items]);
 
   const open = (url: string) => Linking.openURL(url);
+
+  const resolveThumb = (t?: string) => {
+    if (!t) return null;
+    if (t.startsWith('http')) return t;
+    if (t.startsWith('/')) return `${BASE_URL}${t}`;
+    return `${BASE_URL}/${t}`;
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#0b0d10' }} contentContainerStyle={{ padding: 16, gap: 16 }}>
@@ -78,7 +82,6 @@ export default function SpotlightHome() {
           Your submission goes straight to Blue Collar Soapbox. It isn’t public. Nothing moves forward without your say-so.
         </Text>
 
-        {/* ✅ This route will exist once form.tsx is in the folder */}
         <Pressable onPress={() => router.push('/spotlight/form')} style={styles.cta}>
           <Ionicons name="mic-outline" size={18} color="#fff" />
           <Text style={styles.ctaText}>Tell Us Your Story</Text>
@@ -96,13 +99,18 @@ export default function SpotlightHome() {
         />
 
         {filtered.map(item => {
-          const thumbUri = item.thumb && (item.thumb.startsWith('http') ? item.thumb : `${BASE_URL}${item.thumb}`);
+          const thumbUri = resolveThumb(item.thumb);
           return (
             <Pressable key={item.id} onPress={() => open(item.url)} style={styles.bigTile}>
               {thumbUri ? (
                 <Image source={{ uri: thumbUri }} style={styles.bigThumb} resizeMode="cover" />
               ) : null}
               <Text numberOfLines={2} style={styles.bigTitle}>{item.title}</Text>
+              {item.date ? (
+                <Text style={{ color: '#8fa2b6', marginTop: 2 }}>
+                  {new Date(item.date).toLocaleDateString()}
+                </Text>
+              ) : null}
             </Pressable>
           );
         })}
