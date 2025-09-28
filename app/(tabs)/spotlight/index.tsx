@@ -1,12 +1,15 @@
+// app/(tabs)/spotlight/index.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   Linking,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,15 +17,13 @@ import {
   View,
 } from 'react-native';
 
-// ✅ Only import what's guaranteed to exist in your api.ts
+// Shared API config – only need the base URL
 import { API_URL } from '../../lib/api';
-
-const BASE_URL = API_URL;
 
 type SpotItem = {
   id: string;
   title: string;
-  thumb?: string;
+  thumb?: string | null; // may be relative (e.g. /static/Spotlights/..)
   url: string;
   date?: string;
 };
@@ -31,21 +32,35 @@ export default function SpotlightHome() {
   const router = useRouter();
   const [q, setQ] = useState('');
   const [items, setItems] = useState<SpotItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setErr(null);
+    setLoading(true);
+    try {
+      const r = await fetch(`${API_URL}/spotlights`);
+      const j = await r.json();
+      if (Array.isArray(j)) setItems(j);
+      else setItems([]);
+    } catch (e: any) {
+      setErr('Could not load spotlights.');
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        // No auth headers needed
-        const r = await fetch(`${BASE_URL}/spotlights`);
-        const j = await r.json();
-        if (alive && Array.isArray(j)) setItems(j);
-      } catch {
-        // ignore; empty state will show
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
+    load();
+  }, [load]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -55,15 +70,18 @@ export default function SpotlightHome() {
 
   const open = (url: string) => Linking.openURL(url);
 
-  const resolveThumb = (t?: string) => {
-    if (!t) return null;
-    if (t.startsWith('http')) return t;
-    if (t.startsWith('/')) return `${BASE_URL}${t}`;
-    return `${BASE_URL}/${t}`;
+  const renderThumbUri = (thumb?: string | null) => {
+    if (!thumb) return undefined;
+    if (thumb.startsWith('http://') || thumb.startsWith('https://')) return thumb;
+    return `${API_URL}${thumb}`;
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#0b0d10' }} contentContainerStyle={{ padding: 16, gap: 16 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: '#0b0d10' }}
+      contentContainerStyle={{ padding: 16, gap: 16 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#9fb0c0" />}
+    >
       <View style={{ alignItems: 'center' }}>
         <Image
           source={require('../../../assets/spotlight-banner.png')}
@@ -75,11 +93,10 @@ export default function SpotlightHome() {
       <View style={styles.card}>
         <Text style={styles.title}>Soapbox Spotlight</Text>
         <Text style={styles.body}>
-          Real wins, real struggles, real blue-collar stories. This is where interviews, documentaries,
-          and podcasts start.
+          Real wins, real struggles, real blue-collar stories. Interviews, documentaries, and podcasts start here.
         </Text>
         <Text style={[styles.body, { marginTop: 8, color: '#b8c7d6' }]}>
-          Your submission goes straight to Blue Collar Soapbox. It isn’t public. Nothing moves forward without your say-so.
+          Your submission goes straight to Blue Collar Soapbox (not public). Nothing moves forward without your say-so.
         </Text>
 
         <Pressable onPress={() => router.push('/spotlight/form')} style={styles.cta}>
@@ -98,26 +115,28 @@ export default function SpotlightHome() {
           style={styles.input}
         />
 
-        {filtered.map(item => {
-          const thumbUri = resolveThumb(item.thumb);
-          return (
-            <Pressable key={item.id} onPress={() => open(item.url)} style={styles.bigTile}>
-              {thumbUri ? (
-                <Image source={{ uri: thumbUri }} style={styles.bigThumb} resizeMode="cover" />
-              ) : null}
-              <Text numberOfLines={2} style={styles.bigTitle}>{item.title}</Text>
-              {item.date ? (
-                <Text style={{ color: '#8fa2b6', marginTop: 2 }}>
-                  {new Date(item.date).toLocaleDateString()}
-                </Text>
-              ) : null}
-            </Pressable>
-          );
-        })}
-
-        {!filtered.length ? (
-          <Text style={{ color: '#8fa2b6', marginTop: 8 }}>No results.</Text>
-        ) : null}
+        {loading ? (
+          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <ActivityIndicator />
+            <Text style={{ color: '#8fa2b6', marginTop: 8 }}>Loading…</Text>
+          </View>
+        ) : err ? (
+          <Text style={{ color: '#ffb4b4' }}>{err}</Text>
+        ) : filtered.length === 0 ? (
+          <Text style={{ color: '#8fa2b6' }}>No results.</Text>
+        ) : (
+          filtered.map(item => {
+            const thumbUri = renderThumbUri(item.thumb);
+            return (
+              <Pressable key={item.id} onPress={() => open(item.url)} style={styles.bigTile}>
+                {thumbUri ? (
+                  <Image source={{ uri: thumbUri }} style={styles.bigThumb} resizeMode="cover" />
+                ) : null}
+                <Text numberOfLines={2} style={styles.bigTitle}>{item.title}</Text>
+              </Pressable>
+            );
+          })
+        )}
       </View>
 
       <View style={{ height: 16 }} />
