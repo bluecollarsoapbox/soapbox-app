@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Linking,
   Pressable,
@@ -15,12 +14,21 @@ import {
 import Background from '../../components/Background';
 import LogoHeader from '../../components/LogoHeader';
 
-// point this at your server
-const API_URL = 'https://soapbox-server.onrender.com';
+// STATIC mapping to your assets (files live in /assets)
+const BUTTONS: Record<string, any> = {
+  youtube:   require('../../assets/youtubebutton.png'),
+  discord:   require('../../assets/discordbutton.png'),
+  twitch:    require('../../assets/twitchbutton.png'),
+  spotify:   require('../../assets/spotifybutton.png'),
+  facebook:  require('../../assets/facebookbutton.png'),
+  instagram: require('../../assets/instagrambutton.png'),
+  tiktok:    require('../../assets/tiktokbutton.png'),
+  website:   require('../../assets/websitebutton.png'),
+  store:     require('../../assets/merchbutton.png'),
+};
 
-type LinkItem = { title: string; url: string; imageKey?: string; imageUrl?: string };
+type LinkItem = { title: string; url: string };
 
-// fallback = your current hard-coded links (uses bundled images)
 const FALLBACK: LinkItem[] = [
   { title: 'YouTube',   url: 'https://www.youtube.com/@bluecollarsoapbox' },
   { title: 'Discord',   url: 'https://discord.gg/SoapBox' },
@@ -35,73 +43,52 @@ const FALLBACK: LinkItem[] = [
 
 export default function Links() {
   const [items, setItems] = useState<LinkItem[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    let stop = false;
-    (async () => {
-      try {
-        const r = await fetch(`${API_URL}/links`, { headers: { 'Cache-Control': 'no-store' } });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data = (await r.json()) as { items?: LinkItem[] };
-        const list = (data?.items || []).map((it) => ({
-          title: String(it.title || '').trim(),
-          url: String(it.url || '').trim(),
-          imageUrl: it.imageKey
-            ? `${API_URL}/static-s3/${encodeURIComponent(it.imageKey)}`
-            : (it as any).imageUrl || '',
-        })).filter(x => x.title && x.url);
-        if (!stop) setItems(list.length ? list : FALLBACK);
-      } catch (e: any) {
-        if (!stop) {
-          setErr(e?.message || 'Failed to load links');
-          setItems(FALLBACK);
-        }
-      }
-    })();
-    return () => { stop = true; };
+    setItems(FALLBACK);
   }, []);
 
   return (
     <Background useImage>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[styles.content, { paddingTop: 0 }]}
-        contentInsetAdjustmentBehavior="never"
-        automaticallyAdjustContentInsets={false}
-        automaticallyAdjustsScrollIndicatorInsets={false}
-        contentInset={{ top: 0, left: 0, right: 0, bottom: 0 }}
-        scrollIndicatorInsets={{ top: 0, left: 0, right: 0, bottom: 0 }}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={{ alignSelf: 'stretch', marginTop: 16 }}>
           <LogoHeader />
         </View>
 
         <Text style={styles.title}>Links</Text>
 
-        {!!err && (
-          <Text style={{ color: '#ffa7a7', textAlign: 'center', marginBottom: 8 }}>
-            {err} (showing saved list)
-          </Text>
-        )}
-
-        {!items && (
+        {!items ? (
           <View style={{ paddingVertical: 20 }}>
             <ActivityIndicator />
           </View>
-        )}
-
-        {!!items && (
+        ) : (
           <View style={styles.stack}>
-            {items.map((it, idx) => (
-              <Tile
-                key={`${it.title}-${idx}`}
-                title={it.title}
-                imageUrl={it.imageUrl}
-                onPress={() => Linking.openURL(it.url)}
-              />
-            ))}
+            {items.map((it, idx) => {
+              const key = it.title.toLowerCase();
+              const img = BUTTONS[key as keyof typeof BUTTONS];
+
+              // SPECIAL CASE: Spotify opens the in-app collab screen
+              const onPress =
+                key === 'spotify'
+                  ? () => router.push('/spotify-collab')
+                  : () => Linking.openURL(it.url);
+
+              return (
+                <Pressable
+                  key={`${it.title}-${idx}`}
+                  onPress={onPress}
+                  style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
+                >
+                  {img ? (
+                    <Image source={img} style={styles.img} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.img, styles.fallback]}>
+                      <Text style={styles.fallbackText}>{it.title}</Text>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         )}
 
@@ -111,40 +98,14 @@ export default function Links() {
   );
 }
 
-function Tile({ title, imageUrl, onPress }: { title: string; imageUrl?: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.tile, pressed && styles.pressed]}>
-      {imageUrl ? (
-        <Image source={{ uri: imageUrl }} style={styles.img} resizeMode="cover" />
-      ) : (
-        // if imageUrl missing, just show a text tile
-        <View style={[styles.img, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' }]}>
-          <Text style={{ color: '#e6edf3', fontSize: 18, fontWeight: '700' }}>{title}</Text>
-        </View>
-      )}
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, alignItems: 'stretch' },
-
-  title: {
-    color: '#e6edf3',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-
+  title: { color: '#e6edf3', fontSize: 22, fontWeight: '800', marginBottom: 12, textAlign: 'center' },
   stack: { gap: 12 },
-
-  tile: {
-    width: '100%',
-    aspectRatio: 7 / 2, // matches your 1400x400 art
-    overflow: 'hidden',
-  },
+  tile: { width: '100%', aspectRatio: 7 / 2, overflow: 'hidden' },
   img: { width: '100%', height: '100%' },
   pressed: { opacity: 0.92 },
+  fallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
+  fallbackText: { color: '#e6edf3', fontSize: 18, fontWeight: '700' },
 });
