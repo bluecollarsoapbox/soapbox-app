@@ -113,7 +113,6 @@ export default function StoryDetail() {
     }
   };
 
-  // autoplay when screen focuses; cleanup on blur
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -164,10 +163,10 @@ export default function StoryDetail() {
   };
 
   const msFmt = (m?: number) => {
-    if (!m && m !== 0) return '--:--';
-    const sec = Math.floor(m / 1000);
-    const mm = Math.floor(sec / 60).toString().padStart(2, '0');
-    const ss = (sec % 60).toString().padStart(2, '0');
+    if (!m && m!==0) return '--:--';
+    const sec = Math.floor(m/1000);
+    const mm = Math.floor(sec/60).toString().padStart(2,'0');
+    const ss = (sec%60).toString().padStart(2,'0');
     return `${mm}:${ss}`;
   };
 
@@ -177,7 +176,6 @@ export default function StoryDetail() {
   const [picking, setPicking] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // stable-ish id for likes (no PII)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -190,17 +188,9 @@ export default function StoryDetail() {
     return () => { alive = false; };
   }, []);
 
-  const loadWitnesses = useCallback(async () => {
-    // feed disabled: do nothing and keep empty
-    setWitnesses([]);
-  }, []);
+  const loadWitnesses = useCallback(async () => { setWitnesses([]); }, []);
+  useFocusEffect(useCallback(() => { loadWitnesses(); return () => {}; }, [loadWitnesses]));
 
-  useFocusEffect(useCallback(() => {
-    loadWitnesses();
-    return () => {};
-  }, [loadWitnesses]));
-
-  // like toggle -> server (kept for compatibility, even if feed is hidden)
   const toggleLike = async (w: Witness) => {
     try {
       const r = await fetch(`${BASE_URL}/witness/like`, {
@@ -288,7 +278,7 @@ export default function StoryDetail() {
         (nameGuess.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4');
 
       const form = new FormData();
-      form.append('storyId', String(id));
+      form.append('storyId', String(id)); // harmless with path-based endpoint
       form.append('note', '');
 
       if (Platform.OS === 'web' && asset.file instanceof File) {
@@ -300,41 +290,29 @@ export default function StoryDetail() {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 180_000);
 
-      // Try primary path first
-      const tryOnce = async (url: string) => {
-        const r = await fetch(url, {
-          method: 'POST',
-          headers: AUTH,
-          body: form,
-          signal: controller.signal,
-        });
-
-        let bodyJson: any = null;
-        let bodyText: string | undefined;
-        try { bodyJson = await r.json(); } catch { try { bodyText = await r.text(); } catch {} }
-
-        return { r, bodyJson, bodyText, url };
-      };
-
-      let { r, bodyJson, bodyText, url } = await tryOnce(`${BASE_URL}/witness`);
-
-      // If auth/path issue, retry against /api/witness once
-      if (!r.ok && [401, 404, 405].includes(r.status)) {
-        ({ r, bodyJson, bodyText, url } = await tryOnce(`${BASE_URL}/api/witness`));
-      }
+      // ✅ post directly to the real server route
+      const url = `${BASE_URL}/admin/story/${encodeURIComponent(String(id))}/witness`;
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: AUTH,           // sends x-soapbox-key
+        body: form,              // don't set Content-Type manually
+        signal: controller.signal,
+      });
 
       clearTimeout(timeout);
 
       if (!r.ok) {
-        const msg = (bodyJson && (bodyJson.error || bodyJson.message)) || bodyText || `HTTP ${r.status}`;
-        Alert.alert(
-          'Upload failed',
-          `URL: ${url}\nStatus: ${r.status}\n${msg}\n\n(API key sent: ${!!(AUTH as any)['x-soapbox-key']})`
-        );
+        let msg = `HTTP ${r.status}`;
+        try {
+          const j = await r.json();
+          msg = j?.error || j?.message || msg;
+        } catch {
+          try { msg = await r.text(); } catch {}
+        }
+        Alert.alert('Upload failed', `${msg}\n\n(API key sent: ${!!(AUTH as any)['x-soapbox-key']})`);
         return;
       }
 
-      // feed disabled; upload still goes to Discord via server
       Alert.alert('Uploaded', 'Thanks! Your video was submitted. You can view witness videos in our Discord.');
     } catch (e: any) {
       Alert.alert('Upload failed', String(e?.message || e));
@@ -350,7 +328,6 @@ export default function StoryDetail() {
     >
       <LogoHeader />
 
-      {/* YouTube thumbnail centered under the logo */}
       {thumbnail ? (
         <View style={{ alignItems: 'center', marginTop: 8, marginBottom: 12 }}>
           <Image
@@ -365,7 +342,6 @@ export default function StoryDetail() {
 
       <Text style={styles.title}>{storyTitle}</Text>
 
-      {/* Audio controls */}
       <View style={styles.audioBar}>
         <Text style={styles.audioMeta}>
           {msFmt(status.positionMillis)} / {msFmt(status.durationMillis)}
@@ -382,20 +358,14 @@ export default function StoryDetail() {
         </View>
       </View>
 
-      {/* Suggested characters / ideas (BLUE) */}
       <Pressable onPress={() => setIdeasOpen(true)} style={styles.btnWideBlue}>
         <Text style={styles.btnWideBlueText}>Suggested Witness Characters</Text>
       </Pressable>
 
-      {/* Submit button (blue) */}
       <Pressable onPress={openRules} style={styles.btnWideBlue} disabled={picking}>
         <Text style={styles.btnWideBlueText}>{picking ? 'Opening…' : 'Submit Witness Video'}</Text>
       </Pressable>
 
-      {/* Back button (blue) BELOW submit */}
-      {/* REMOVED per request */}
-
-      {/* Witness feed (disabled) -> point to Discord Breaking News channel */}
       <View style={{ marginTop: 8 }}>
         <Text style={[styles.title, { marginBottom: 8 }]}>Witness Videos</Text>
 
@@ -416,7 +386,6 @@ export default function StoryDetail() {
         </View>
       </View>
 
-      {/* Rules modal */}
       <Modal visible={rulesOpen} transparent animationType="fade" onRequestClose={() => setRulesOpen(false)}>
         <View style={styles.modalWrap}>
           <View style={styles.modalCard}>
@@ -429,12 +398,9 @@ export default function StoryDetail() {
               • 1 minute max{'\n'}
               • One upload per story per device
             </Text>
-
-            {/* Disclaimer on its own line, bold */}
             <Text style={[styles.modalText, { fontWeight: '800', marginTop: 10 }]}>
               By clicking "I Agree," below, you grant Marshall Patrick and Blue Collar Soapbox permission to use the uploaded video as content on any social media account owned or operated by Marshall Patrick and/or Blue Collar Soapbox
             </Text>
-
             <View style={{ height: 12 }} />
             <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'flex-end' }}>
               <Pressable onPress={() => setRulesOpen(false)} style={styles.btnGhost} disabled={picking}>
@@ -451,7 +417,6 @@ export default function StoryDetail() {
         </View>
       </Modal>
 
-      {/* Ideas modal */}
       <Modal visible={ideasOpen} transparent animationType="fade" onRequestClose={() => setIdeasOpen(false)}>
         <View style={styles.modalWrap}>
           <View style={styles.modalCard}>
@@ -473,7 +438,6 @@ export default function StoryDetail() {
         </View>
       </Modal>
 
-      {/* Uploading overlay spinner */}
       <Modal visible={uploading} transparent animationType="fade">
         <View style={styles.overlayWrap}>
           <View style={styles.overlayCard}>
@@ -488,7 +452,6 @@ export default function StoryDetail() {
   );
 }
 
-/** Inline video player with single-tap toggle, replay-on-finish, and double-tap like */
 function WitnessPlayer({
   item,
   onLike,
@@ -498,13 +461,11 @@ function WitnessPlayer({
 }) {
   const videoRef = useRef<Video | null>(null);
   const [finished, setFinished] = useState(false);
-
-  // double-tap
   const lastTap = useRef<number>(0);
+
   const onPress = async () => {
     const now = Date.now();
     if (now - lastTap.current < 300) {
-      // double tap => like
       onLike();
       return;
     }
@@ -558,8 +519,6 @@ function WitnessPlayer({
           resizeMode={ResizeMode.CONTAIN}
           onPlaybackStatusUpdate={onStatusUpdate}
         />
-
-        {/* bottom-right like counter */}
         <View
           style={{
             position: 'absolute',

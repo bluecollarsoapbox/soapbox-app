@@ -1,4 +1,11 @@
+// soapbox-app/lib/api.ts
+
 export const API_URL = 'https://soapbox-server.onrender.com';
+
+// this adds your admin key header so all uploads and admin actions work
+export const AUTH_HEADER = {
+  'x-soapbox-key': '99dnfneeekdegnrJJSN3JdenrsdnJ',
+};
 
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${API_URL}${path}`, {

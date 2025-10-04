@@ -19,7 +19,7 @@ import { API_URL } from '../../lib/api';
 type SpotItem = {
   id: string;
   title: string;
-  thumb: string; // absolute or /static path
+  thumb?: string; // absolute or /static path
   url: string;
   date?: string;
 };
@@ -33,7 +33,8 @@ export default function SpotlightHome() {
     let alive = true;
     (async () => {
       try {
-        const r = await fetch(`${API_URL}/spotlight-videos`);
+        // ✅ server route is /spotlights
+        const r = await fetch(`${API_URL}/spotlights`);
         const j = await r.json();
         if (alive && Array.isArray(j)) setItems(j);
       } catch {
@@ -88,9 +89,10 @@ export default function SpotlightHome() {
         />
 
         {filtered.map(item => {
-          const thumbUri = item.thumb.startsWith('http')
-            ? item.thumb
-            : `${API_URL}${item.thumb}`;
+          const thumbUri =
+            item.thumb
+              ? (item.thumb.startsWith('http') ? item.thumb : `${API_URL}${item.thumb}`)
+              : '';
           return (
             <Pressable key={item.id} onPress={() => open(item.url)} style={styles.bigTile}>
               {!!thumbUri && (

@@ -15,10 +15,8 @@ import {
   View,
 } from 'react-native';
 
-// shared API config (correct relative path from here)
-import { API_URL, AUTH_HEADER } from '../../lib/api';
-const BASE_URL = API_URL;
-const AUTH = AUTH_HEADER;
+// ✅ Only API_URL is needed; this endpoint is open (no admin key)
+import { API_URL } from '../../lib/api';
 
 export default function SpotlightForm() {
   const router = useRouter();
@@ -53,33 +51,51 @@ export default function SpotlightForm() {
     try {
       setSending(true);
 
-      const body = {
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        city: city.trim(),
-        state: stateUS.trim(),
-        subject: subject.trim(),
-        details: details.trim(),
-        companies: companies
-          .split(',')
-          .map(s => s.trim())
-          .filter(Boolean),
-        consent: true,
-      };
+      // Build payload expected by the server's /spotlights route
+      const displayName =
+        `${name.trim()} — ${city.trim()}, ${stateUS.trim()}`.replace(/\s+/g, ' ');
+      const contactLink = email.trim()
+        ? `mailto:${email.trim()}`
+        : `tel:${phone.trim()}`;
 
-      const r = await fetch(`${BASE_URL}/spotlight`, {
+      const companiesClean = companies
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const notesLines = [
+        subject.trim() ? `Subject: ${subject.trim()}` : null,
+        `Details: ${details.trim()}`,
+        companiesClean.length ? `Companies: ${companiesClean.join(', ')}` : null,
+        email.trim() ? `Email: ${email.trim()}` : null,
+        phone.trim() ? `Phone: ${phone.trim()}` : null,
+        `City/State: ${city.trim()}, ${stateUS.trim()}`,
+        `Consent: yes`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      // This route goes straight to your Spotlights Discord channel
+      const r = await fetch(`${API_URL}/spotlights`, {
         method: 'POST',
-        headers: { ...AUTH, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: displayName,
+          link: contactLink, // server expects a URL-ish string; mailto/tel is valid
+          notes: notesLines,
+        }),
       });
 
-      if (!r.ok) {
-        const j = await r.json().catch(() => null);
+      // Handle server response
+      let j: any = null;
+      try { j = await r.json(); } catch {}
+      if (!r.ok || (j && j.error)) {
         throw new Error(j?.error || `HTTP ${r.status}`);
       }
 
-      Alert.alert('Thanks!', 'Your submission was sent to Blue Collar Soapbox.');
+      Alert.alert('Thanks!', 'Your submission was sent to Blue Collar Soapbox.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
 
       // reset fields
       setName('');
@@ -104,7 +120,7 @@ export default function SpotlightForm() {
         <View style={{ alignItems: 'center' }}>
           <Image
             source={require('../../../assets/spotlight-banner.png')}
-            style={{ width: 380, height: undefined, aspectRatio: 16/9, maxWidth: '90%', transform: [{ scale: 1.8 }] }}
+            style={{ width: 380, height: undefined, aspectRatio: 16 / 9, maxWidth: '90%', transform: [{ scale: 1.8 }] }}
             resizeMode="contain"
           />
         </View>
