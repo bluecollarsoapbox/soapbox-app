@@ -220,27 +220,39 @@ export default function StoryDetail() {
   const videoOnlyMediaTypes = ImagePicker.MediaTypeOptions.Videos as const;
 
   const launchPicker = async () => {
-    const ok = await ensurePickerPermission();
-    if (!ok) {
-      Alert.alert('Permission needed', 'Please allow photo/video access to upload.');
-      return null;
-    }
+  const ok = await ensurePickerPermission();
+  if (!ok) {
+    Alert.alert('Permission needed', 'Please allow photo/video access to upload.');
+    return null;
+  }
 
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: videoOnlyMediaTypes,
-      allowsEditing: false,
-      quality: 1,
-      videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
-    });
+  const res = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: videoOnlyMediaTypes,
+    allowsEditing: false,
+    quality: 1,
+    videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
+  });
 
-    if ((res as any).canceled) return null;
-    const asset = (res as any).assets?.[0];
-    if (!asset) {
-      Alert.alert('No file', 'Could not read the selected video.');
-      return null;
-    }
-    return asset;
-  };
+  if ((res as any).canceled) return null;
+  const asset = (res as any).assets?.[0];
+  if (!asset) {
+    Alert.alert('No file', 'Could not read the selected video.');
+    return null;
+  }
+
+  // If we have dimensions, block portrait right away.
+  const w = Number(asset.width || 0);
+  const h = Number(asset.height || 0);
+  if (w && h && h > w) {
+    Alert.alert(
+      'Landscape Required',
+      'Videos must be submitted in landscape (wide). Please try again.'
+    );
+    return null;
+  }
+
+  return asset;
+};
 
   const onAgreeAndPick = async () => {
     if (picking) return;
@@ -266,60 +278,76 @@ export default function StoryDetail() {
   };
 
   const actuallyUpload = async (asset: any) => {
-    try {
-      setUploading(true);
+  try {
+    setUploading(true);
 
-      const nameGuess = (String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4')
-        .replace(/[^\w.\-]/g, '_');
+    const nameGuess = (String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4')
+      .replace(/[^\w.\-]/g, '_');
 
-      const typeGuess =
-        asset.mimeType ||
-        asset.file?.type ||
-        (nameGuess.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4');
+    const typeGuess =
+      asset.mimeType ||
+      asset.file?.type ||
+      (nameGuess.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4');
 
-      const form = new FormData();
-      form.append('storyId', String(id)); // harmless with path-based endpoint
-      form.append('note', '');
+    const form = new FormData();
+    form.append('storyId', String(id)); // harmless with path-based endpoint
+    form.append('note', '');
 
-      if (Platform.OS === 'web' && asset.file instanceof File) {
-        form.append('video', asset.file, asset.file.name || nameGuess);
-      } else {
-        form.append('video', { uri: asset.uri, name: nameGuess, type: typeGuess } as any);
-      }
+    if (Platform.OS === 'web' && asset.file instanceof File) {
+      form.append('video', asset.file, asset.file.name || nameGuess);
+    } else {
+      form.append('video', { uri: asset.uri, name: nameGuess, type: typeGuess } as any);
+    }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 180_000);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180_000);
 
-      // ✅ post directly to the real server route
-      const url = `${BASE_URL}/admin/story/${encodeURIComponent(String(id))}/witness`;
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: AUTH,           // sends x-soapbox-key
-        body: form,              // don't set Content-Type manually
-        signal: controller.signal,
-      });
+    const url = `${BASE_URL}/admin/story/${encodeURIComponent(String(id))}/witness`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: AUTH,           // sends x-soapbox-key
+      body: form,              // don't set Content-Type manually
+      signal: controller.signal,
+    });
 
-      clearTimeout(timeout);
+    clearTimeout(timeout);
 
-      if (!r.ok) {
-        let msg = `HTTP ${r.status}`;
-        try {
-          const j = await r.json();
-          msg = j?.error || j?.message || msg;
-        } catch {
-          try { msg = await r.text(); } catch {}
-        }
-        Alert.alert('Upload failed', `${msg}\n\n(API key sent: ${!!(AUTH as any)['x-soapbox-key']})`);
+    // Safely parse response bodies for error reporting
+    let bodyJson: any = null;
+    let bodyText: string | undefined;
+    try { bodyJson = await r.clone().json(); } catch {}
+    if (!bodyJson) { try { bodyText = await r.clone().text(); } catch {} }
+
+    if (!r.ok) {
+      const msg =
+        (bodyJson && (bodyJson.error || bodyJson.message)) ||
+        bodyText ||
+        `HTTP ${r.status}`;
+
+      // If server rejected for portrait, show clean message
+      if (/landscape/i.test(msg) && r.status === 400) {
+        Alert.alert(
+          'Landscape Required',
+          'Videos must be submitted in landscape (wide). Please try again.'
+        );
         return;
       }
 
-      Alert.alert('Uploaded', 'Thanks! Your video was submitted. You can view witness videos in our Discord.');
-    } catch (e: any) {
-      Alert.alert('Upload failed', String(e?.message || e));
-    } finally {
-      setUploading(false);
+      Alert.alert(
+        'Upload failed',
+        `URL: ${url}\nStatus: ${r.status}\n${msg}\n\n(API key sent: ${!!(AUTH as any)['x-soapbox-key']})`
+      );
+      return;
     }
-  };
+
+    Alert.alert('Uploaded', 'Thanks! Your video was submitted. You can view witness videos in our Discord.');
+  } catch (e: any) {
+    Alert.alert('Upload failed', String(e?.message || e));
+  } finally {
+    setUploading(false);
+  }
+};
+
 
   return (
     <ScrollView
