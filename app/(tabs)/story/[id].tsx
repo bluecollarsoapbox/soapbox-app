@@ -20,6 +20,8 @@ import {
 } from 'react-native';
 import LogoHeader from '../../../components/LogoHeader';
 import { API_URL, AUTH_HEADER } from '../../lib/api';
+import * as FileSystem from 'expo-file-system';
+
 
 const BASE_URL = API_URL;
 const AUTH = AUTH_HEADER;
@@ -169,6 +171,29 @@ export default function StoryDetail() {
     const ss = (sec%60).toString().padStart(2,'0');
     return `${mm}:${ss}`;
   };
+const getAssetSizeBytes = async (asset: any) => {
+  // Web: File object exposes .size (in bytes)
+  if (Platform.OS === 'web' && asset.file instanceof File) {
+    return typeof asset.file.size === 'number' ? asset.file.size : 0;
+  }
+
+  // Native: use Expo FileSystem
+  const info = await FileSystem.getInfoAsync(String(asset.uri));
+  // Narrow the union: must exist and not be a directory
+  if (!info.exists || (info as any).isDirectory) return 0;
+
+  const size = (info as any).size;
+  return typeof size === 'number' ? size : 0;
+};
+
+const showTooBigPopup = () => {
+  Alert.alert(
+    'Too big',
+    'Your file is too strong for me! It hurts! Send another one less than 500mb instead!'
+  );
+};
+
+
 
   // ----- witness feed state -----
   const [witnesses, setWitnesses] = useState<Witness[]>([]);
@@ -281,8 +306,17 @@ export default function StoryDetail() {
   try {
     setUploading(true);
 
-    const nameGuess = (String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4')
-      .replace(/[^\w.\-]/g, '_');
+    // Preflight: block > 500 MB before we even try to upload
+    const sizeBytes = await getAssetSizeBytes(asset);
+    if (sizeBytes && sizeBytes > 500 * 1024 * 1024) {
+      showTooBigPopup();
+      setUploading(false);
+      return;
+    }
+
+    const nameGuess = (
+      String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4'
+    ).replace(/[^\w.\-]/g, '_');
 
     const typeGuess =
       asset.mimeType ||
@@ -312,11 +346,16 @@ export default function StoryDetail() {
 
     clearTimeout(timeout);
 
-    // Safely parse response bodies for error reporting
+    // If server limit tripped (payload too large), show the same friendly popup
+    if (r.status === 413) {
+      showTooBigPopup();
+      return;
+    }
+
+    // Read body (may be JSON or text)
+    const bodyText = await r.text().catch(() => '');
     let bodyJson: any = null;
-    let bodyText: string | undefined;
-    try { bodyJson = await r.clone().json(); } catch {}
-    if (!bodyJson) { try { bodyText = await r.clone().text(); } catch {} }
+    try { bodyJson = JSON.parse(bodyText); } catch {}
 
     if (!r.ok) {
       const msg =
@@ -324,11 +363,11 @@ export default function StoryDetail() {
         bodyText ||
         `HTTP ${r.status}`;
 
-      // If server rejected for portrait, show clean message
+      // Server-side portrait rejection
       if (/landscape/i.test(msg) && r.status === 400) {
         Alert.alert(
           'Landscape Required',
-          'Videos must be submitted in landscape (wide). Please try again.'
+          'Videos must be submitted in landscape (wide). Please rotate your phone and try again.'
         );
         return;
       }
@@ -347,6 +386,7 @@ export default function StoryDetail() {
     setUploading(false);
   }
 };
+
 
 
   return (
