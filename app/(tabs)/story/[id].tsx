@@ -20,8 +20,8 @@ import {
 } from 'react-native';
 import LogoHeader from '../../../components/LogoHeader';
 import { API_URL, AUTH_HEADER } from '../../lib/api';
-import * as FileSystem from 'expo-file-system';
-
+// IMPORTANT: use legacy shim so getInfoAsync works the same everywhere
+import * as FileSystem from 'expo-file-system/legacy';
 
 const BASE_URL = API_URL;
 const AUTH = AUTH_HEADER;
@@ -171,29 +171,26 @@ export default function StoryDetail() {
     const ss = (sec%60).toString().padStart(2,'0');
     return `${mm}:${ss}`;
   };
-const getAssetSizeBytes = async (asset: any) => {
-  // Web: File object exposes .size (in bytes)
-  if (Platform.OS === 'web' && asset.file instanceof File) {
-    return typeof asset.file.size === 'number' ? asset.file.size : 0;
-  }
 
-  // Native: use Expo FileSystem
-  const info = await FileSystem.getInfoAsync(String(asset.uri));
-  // Narrow the union: must exist and not be a directory
-  if (!info.exists || (info as any).isDirectory) return 0;
+  // ===== Size helpers & popup =====
+  const getAssetSizeBytes = async (asset: any) => {
+    // Web: File object exposes .size (in bytes)
+    if (Platform.OS === 'web' && asset?.file instanceof File) {
+      return typeof asset.file.size === 'number' ? asset.file.size : 0;
+    }
+    // Native: use Expo FileSystem (legacy shim)
+    const info = await FileSystem.getInfoAsync(String(asset.uri));
+    if (!(info as any)?.exists || (info as any)?.isDirectory) return 0;
+    const size = (info as any).size;
+    return typeof size === 'number' ? size : 0;
+  };
 
-  const size = (info as any).size;
-  return typeof size === 'number' ? size : 0;
-};
-
-const showTooBigPopup = () => {
-  Alert.alert(
-    'Too big',
-    'Your file is too strong for me! It hurts! Send another one less than 500mb instead!'
-  );
-};
-
-
+  const showTooBigPopup = () => {
+    Alert.alert(
+      'Too big',
+      'Your file is too strong for me! It hurts! Send another one less than 500mb instead!'
+    );
+  };
 
   // ----- witness feed state -----
   const [witnesses, setWitnesses] = useState<Witness[]>([]);
@@ -245,39 +242,39 @@ const showTooBigPopup = () => {
   const videoOnlyMediaTypes = ImagePicker.MediaTypeOptions.Videos as const;
 
   const launchPicker = async () => {
-  const ok = await ensurePickerPermission();
-  if (!ok) {
-    Alert.alert('Permission needed', 'Please allow photo/video access to upload.');
-    return null;
-  }
+    const ok = await ensurePickerPermission();
+    if (!ok) {
+      Alert.alert('Permission needed', 'Please allow photo/video access to upload.');
+      return null;
+    }
 
-  const res = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: videoOnlyMediaTypes,
-    allowsEditing: false,
-    quality: 1,
-    videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
-  });
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: videoOnlyMediaTypes,
+      allowsEditing: false,
+      quality: 1,
+      videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
+    });
 
-  if ((res as any).canceled) return null;
-  const asset = (res as any).assets?.[0];
-  if (!asset) {
-    Alert.alert('No file', 'Could not read the selected video.');
-    return null;
-  }
+    if ((res as any).canceled) return null;
+    const asset = (res as any).assets?.[0];
+    if (!asset) {
+      Alert.alert('No file', 'Could not read the selected video.');
+      return null;
+    }
 
-  // If we have dimensions, block portrait right away.
-  const w = Number(asset.width || 0);
-  const h = Number(asset.height || 0);
-  if (w && h && h > w) {
-    Alert.alert(
-      'Landscape Required',
-      'Videos must be submitted in landscape (wide). Please try again.'
-    );
-    return null;
-  }
+    // If we have dimensions, block portrait right away.
+    const w = Number(asset.width || 0);
+    const h = Number(asset.height || 0);
+    if (w && h && h > w) {
+      Alert.alert(
+        'Landscape Required',
+        'Videos must be submitted in landscape (wide). Please try again.'
+      );
+      return null;
+    }
 
-  return asset;
-};
+    return asset;
+  };
 
   const onAgreeAndPick = async () => {
     if (picking) return;
@@ -303,91 +300,89 @@ const showTooBigPopup = () => {
   };
 
   const actuallyUpload = async (asset: any) => {
-  try {
-    setUploading(true);
+    try {
+      setUploading(true);
 
-    // Preflight: block > 500 MB before we even try to upload
-    const sizeBytes = await getAssetSizeBytes(asset);
-    if (sizeBytes && sizeBytes > 500 * 1024 * 1024) {
-      showTooBigPopup();
-      setUploading(false);
-      return;
-    }
+      // Preflight: block > 500 MB before we even try to upload
+      const sizeBytes = await getAssetSizeBytes(asset);
+      if (sizeBytes && sizeBytes > 500 * 1024 * 1024) {
+        showTooBigPopup();
+        setUploading(false);
+        return;
+      }
 
-    const nameGuess = (
-      String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4'
-    ).replace(/[^\w.\-]/g, '_');
+      const nameGuess = (
+        String(asset.uri || (asset.file?.name ?? 'witness.mp4')).split('/').pop() || 'witness.mp4'
+      ).replace(/[^\w.\-]/g, '_');
 
-    const typeGuess =
-      asset.mimeType ||
-      asset.file?.type ||
-      (nameGuess.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4');
+      const typeGuess =
+        asset.mimeType ||
+        asset.file?.type ||
+        (nameGuess.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4');
 
-    const form = new FormData();
-    form.append('storyId', String(id)); // harmless with path-based endpoint
-    form.append('note', '');
+      const form = new FormData();
+      form.append('storyId', String(id)); // harmless with path-based endpoint
+      form.append('note', '');
 
-    if (Platform.OS === 'web' && asset.file instanceof File) {
-      form.append('video', asset.file, asset.file.name || nameGuess);
-    } else {
-      form.append('video', { uri: asset.uri, name: nameGuess, type: typeGuess } as any);
-    }
+      if (Platform.OS === 'web' && asset.file instanceof File) {
+        form.append('video', asset.file, asset.file.name || nameGuess);
+      } else {
+        form.append('video', { uri: asset.uri, name: nameGuess, type: typeGuess } as any);
+      }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 180_000);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180_000);
 
-    const url = `${BASE_URL}/admin/story/${encodeURIComponent(String(id))}/witness`;
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: AUTH,           // sends x-soapbox-key
-      body: form,              // don't set Content-Type manually
-      signal: controller.signal,
-    });
+      const url = `${BASE_URL}/admin/story/${encodeURIComponent(String(id))}/witness`;
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: AUTH,           // sends x-soapbox-key
+        body: form,              // don't set Content-Type manually
+        signal: controller.signal,
+      });
 
-    clearTimeout(timeout);
+      clearTimeout(timeout);
 
-    // If server limit tripped (payload too large), show the same friendly popup
-    if (r.status === 413) {
-      showTooBigPopup();
-      return;
-    }
+      // If server limit tripped (payload too large), show the same friendly popup
+      if (r.status === 413) {
+        showTooBigPopup();
+        return;
+      }
 
-    // Read body (may be JSON or text)
-    const bodyText = await r.text().catch(() => '');
-    let bodyJson: any = null;
-    try { bodyJson = JSON.parse(bodyText); } catch {}
+      // Read body (may be JSON or text)
+      const bodyText = await r.text().catch(() => '');
+      let bodyJson: any = null;
+      try { bodyJson = JSON.parse(bodyText); } catch {}
 
-    if (!r.ok) {
-      const msg =
-        (bodyJson && (bodyJson.error || bodyJson.message)) ||
-        bodyText ||
-        `HTTP ${r.status}`;
+      if (!r.ok) {
+        const msg =
+          (bodyJson && (bodyJson.error || bodyJson.message)) ||
+          bodyText ||
+          `HTTP ${r.status}`;
 
-      // Server-side portrait rejection
-      if (/landscape/i.test(msg) && r.status === 400) {
+        // Server-side portrait rejection
+        if (/landscape/i.test(msg) && r.status === 400) {
+          Alert.alert(
+            'Landscape Required',
+            'Videos must be submitted in landscape (wide). Please rotate your phone and try again.'
+          );
+          return;
+        }
+
         Alert.alert(
-          'Landscape Required',
-          'Videos must be submitted in landscape (wide). Please rotate your phone and try again.'
+          'Upload failed',
+          `URL: ${url}\nStatus: ${r.status}\n${msg}\n\n(API key sent: ${!!(AUTH as any)['x-soapbox-key']})`
         );
         return;
       }
 
-      Alert.alert(
-        'Upload failed',
-        `URL: ${url}\nStatus: ${r.status}\n${msg}\n\n(API key sent: ${!!(AUTH as any)['x-soapbox-key']})`
-      );
-      return;
+      Alert.alert('Uploaded', 'Thanks! Your video was submitted. You can view witness videos in our Discord.');
+    } catch (e: any) {
+      Alert.alert('Upload failed', String(e?.message || e));
+    } finally {
+      setUploading(false);
     }
-
-    Alert.alert('Uploaded', 'Thanks! Your video was submitted. You can view witness videos in our Discord.');
-  } catch (e: any) {
-    Alert.alert('Upload failed', String(e?.message || e));
-  } finally {
-    setUploading(false);
-  }
-};
-
-
+  };
 
   return (
     <ScrollView
